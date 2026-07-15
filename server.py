@@ -527,7 +527,7 @@ def invoice_finalize(inv_id: str) -> dict:
 
 # ── Health check (for Render / load balancers) ────────────────────────────────
 
-@mcp.custom_route("/health", methods=["GET"])
+@mcp.custom_route("/mcp-health", methods=["GET"])
 async def health(request):
     from starlette.responses import JSONResponse
     return JSONResponse({"status": "ok", "tools": 25, "service": "p2p-hackathon-mcp"})
@@ -548,7 +548,10 @@ if __name__ == "__main__":
     else:
         mcp.settings.host = args.host
         mcp.settings.port = args.port
-        # Allow all hosts/origins so ngrok tunnel works
+        # Serve MCP at root path so QiStudio can find it at base URL
+        mcp.settings.streamable_http_path = "/"
+        mcp.settings.sse_path = "/sse"
+        mcp.settings.message_path = "/messages/"
         from mcp.server.fastmcp.server import TransportSecuritySettings
         mcp.settings.transport_security = TransportSecuritySettings(
             enable_dns_rebinding_protection=False,

@@ -8,4 +8,4 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.0
-    healthCheckPath: /health
+    healthCheckPath: /mcp-health
