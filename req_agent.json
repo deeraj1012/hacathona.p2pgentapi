@@ -1,0 +1,681 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "description": "Starting point of the Req orchestration",
+      "position": { "x": 150, "y": 102 },
+      "deletable": false,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "label": "start",
+        "nodeType": "start",
+        "triggerWizard": { "triggerType": "api" }
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-start-001",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.interface.inputs.message}}",
+          "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-req-start-002",
+          "fieldName": "system.files",
+          "operation": "clear"
+        },
+        {
+          "variableUpdateId": "vu-req-start-003",
+          "fieldName": "system.userQuery",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.message}}"
+        },
+        {
+          "variableUpdateId": "vu-req-start-004",
+          "fieldName": "system.cartFlipEvent",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.cartFlipEvent}}"
+        },
+        {
+          "variableUpdateId": "vu-req-start-005",
+          "fieldName": "system.sessionId",
+          "operation": "set",
+          "value": "{{nodeOutput.options.sessionId}}"
+        }
+      ],
+      "width": 250,
+      "height": 96
+    },
+    {
+      "id": "req_intent_analyzer",
+      "type": "agent",
+      "name": "intent_analyzer",
+      "description": "Reads the CartFlipped event and extracts everything needed to create a requisition",
+      "position": { "x": 500, "y": 98 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "req-intent-sys-001",
+            "role": "system",
+            "text": "You are the Intent Analyzer for GEP's P2P Requisition Agent. You receive a CartFlipped event from the Catalog Agent and extract all information needed to create and process a requisition.\n\nFrom the CartFlipped event payload, extract:\n- cart_id: the source cart ID\n- buyer_id: the buyer's ID\n- session_id: the session ID\n- lines: array of line items (item_id, item_name, sku, quantity, unit_price, line_total, supplier_id)\n- grand_total: total value of the requisition\n- cost_center: accounting cost centre (e.g. CC-4201) — required for submission\n- gl_account: GL account code (e.g. GL-5501-IT) — required for submission\n- deliver_to: delivery address — required for submission\n- need_by: required delivery date — required for submission\n\nAlso determine:\n- missing_fields: list of required fields that are null or missing (cost_center, gl_account, deliver_to, need_by)\n- can_auto_proceed: true if all required fields are present, false if any are missing\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"cart_id\": \"cart-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"lines\": [\n    { \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"quantity\": 10, \"unit_price\": 85000, \"line_total\": 850000, \"supplier_id\": \"SUP-001\" }\n  ],\n  \"grand_total\": 850000,\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\",\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"missing_fields\": [],\n  \"can_auto_proceed\": true\n}"
+          },
+          {
+            "id": "req-intent-usr-001",
+            "role": "user",
+            "text": "CartFlipped event received:\n{{system.cartFlipEvent}}\n\nExtract all requisition fields and return the JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ReqIntent",
+          "description": "Structured requisition data extracted from CartFlipped event",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "cart_id": { "type": "string" },
+              "buyer_id": { "type": "string" },
+              "session_id": { "type": "string" },
+              "lines": { "type": "array" },
+              "grand_total": { "type": "number" },
+              "cost_center": { "type": ["string", "null"] },
+              "gl_account": { "type": ["string", "null"] },
+              "deliver_to": { "type": ["string", "null"] },
+              "need_by": { "type": ["string", "null"] },
+              "missing_fields": { "type": "array" },
+              "can_auto_proceed": { "type": "boolean" }
+            },
+            "required": ["cart_id", "buyer_id", "lines", "grand_total", "missing_fields", "can_auto_proceed"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-intent-out",
+          "fieldName": "system.reqIntent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-req-intent-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 259,
+      "height": 102
+    },
+    {
+      "id": "req_planner",
+      "type": "agent",
+      "name": "planner",
+      "description": "Builds the ordered execution plan for req creation, accounting, delivery, submit, and approval",
+      "position": { "x": 832, "y": 98 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "req-planner-sys-001",
+            "role": "system",
+            "text": "You are the Planner for GEP's P2P Requisition Agent. Your job is to create an ordered execution plan for processing a requisition based on the extracted intent.\n\nAvailable requisition tools (will be wired via MCP later):\n1. req_create(cart_id, buyer_id, lines[], grand_total) — Create requisition from cart\n2. req_set_accounting(req_id, cost_center, gl_account) — Attach accounting codes\n3. req_set_delivery(req_id, deliver_to, need_by) — Attach delivery details\n4. req_submit(req_id) — Submit requisition for approval\n5. req_get_status(req_id) — Poll approval status\n6. req_approve(req_id) — Approve requisition (auto-approve in demo mode)\n\nPlanning rules:\n- ALWAYS start with req_create\n- ALWAYS call req_set_accounting after create — cost_center and gl_account are mandatory\n- ALWAYS call req_set_delivery after accounting — deliver_to and need_by are mandatory\n- ALWAYS call req_submit after delivery is set\n- ALWAYS call req_get_status after submit to confirm it entered approval\n- ALWAYS call req_approve last (demo auto-approves)\n- If missing_fields is not empty: plan must include a clarification step BEFORE req_create\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"req_create\", \"params\": { \"cart_id\": \"{{reqIntent.cart_id}}\", \"buyer_id\": \"{{reqIntent.buyer_id}}\", \"lines\": \"{{reqIntent.lines}}\", \"grand_total\": \"{{reqIntent.grand_total}}\" }, \"purpose\": \"Create requisition from cart\" },\n    { \"step\": 2, \"tool\": \"req_set_accounting\", \"params\": { \"req_id\": \"{{step1.req_id}}\", \"cost_center\": \"CC-4201\", \"gl_account\": \"GL-5501-IT\" }, \"purpose\": \"Attach accounting codes\" },\n    { \"step\": 3, \"tool\": \"req_set_delivery\", \"params\": { \"req_id\": \"{{step1.req_id}}\", \"deliver_to\": \"Hyderabad Office\", \"need_by\": \"2024-12-20\" }, \"purpose\": \"Set delivery details\" },\n    { \"step\": 4, \"tool\": \"req_submit\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Submit for approval\" },\n    { \"step\": 5, \"tool\": \"req_get_status\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Confirm approval status\" },\n    { \"step\": 6, \"tool\": \"req_approve\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Auto-approve requisition\" }\n  ],\n  \"total_steps\": 6,\n  \"needs_clarification\": false,\n  \"missing_fields\": []\n}"
+          },
+          {
+            "id": "req-planner-usr-001",
+            "role": "user",
+            "text": "Requisition intent:\n{{system.reqIntent}}\n\nCreate the execution plan as a JSON object."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ReqExecutionPlan",
+          "description": "Ordered execution plan for requisition processing",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "execution_plan": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "step": { "type": "integer" },
+                    "tool": { "type": "string" },
+                    "params": { "type": "object" },
+                    "purpose": { "type": "string" }
+                  },
+                  "required": ["step", "tool", "params", "purpose"]
+                }
+              },
+              "total_steps": { "type": "integer" },
+              "needs_clarification": { "type": "boolean" },
+              "missing_fields": { "type": "array" }
+            },
+            "required": ["execution_plan", "total_steps", "needs_clarification"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-plan-out",
+          "fieldName": "system.reqExecutionPlan",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-req-plan-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102
+    },
+    {
+      "id": "req_tool_executer",
+      "type": "agent",
+      "name": "tool_executer",
+      "description": "Executes req API calls — create, set accounting, set delivery, submit, approve",
+      "position": { "x": 1175, "y": 98 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "req-exec-sys-001",
+            "role": "system",
+            "text": "You are the Tool Executor for GEP's P2P Requisition Agent. Execute the planned requisition API calls in order using the MCP tools available to you.\n\nTools available (will be wired via MCP later):\n- req_create: Create a new requisition from a cart\n- req_set_accounting: Attach cost centre and GL account to a requisition\n- req_set_delivery: Attach delivery address and need-by date\n- req_submit: Submit requisition for approval workflow\n- req_get_status: Poll requisition approval status\n- req_approve: Approve the requisition (auto-approve in demo)\n\nExecution rules:\n1. Execute each step IN ORDER — never skip\n2. Capture req_id from step 1 (req_create) and pass it to ALL subsequent steps\n3. After req_submit, call req_get_status to confirm status changed to PENDING_APPROVAL\n4. After req_approve, confirm status changed to APPROVED\n5. If any step returns an error, stop immediately and report clearly\n6. Never fabricate tool responses\n\nAfter ALL steps complete, output:\n{\n  \"status\": \"success\" | \"partial\" | \"error\",\n  \"steps_completed\": <number>,\n  \"results\": {\n    \"req_id\": \"...\",\n    \"req_status\": \"APPROVED\",\n    \"cost_center\": \"...\",\n    \"gl_account\": \"...\",\n    \"deliver_to\": \"...\",\n    \"need_by\": \"...\",\n    \"lines\": [...],\n    \"grand_total\": <number>,\n    \"approved_at\": \"...\"\n  },\n  \"error\": null\n}"
+          },
+          {
+            "id": "req-exec-usr-001",
+            "role": "user",
+            "text": "Execute this requisition plan:\n\n{{system.reqExecutionPlan}}\n\nContext:\n- Session ID: {{system.sessionId}}\n- Req intent: {{system.reqIntent}}\n\nExecute each step in order and return the full results JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 10,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ReqExecutionResults",
+          "description": "Results of all requisition tool executions",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["success", "partial", "error"] },
+              "steps_completed": { "type": "integer" },
+              "results": {
+                "type": "object",
+                "properties": {
+                  "req_id": { "type": "string" },
+                  "req_status": { "type": "string" },
+                  "cost_center": { "type": "string" },
+                  "gl_account": { "type": "string" },
+                  "deliver_to": { "type": "string" },
+                  "need_by": { "type": "string" },
+                  "lines": { "type": "array" },
+                  "grand_total": { "type": "number" },
+                  "approved_at": { "type": "string" }
+                }
+              },
+              "error": {}
+            },
+            "required": ["status", "steps_completed", "results"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": true,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-exec-out",
+          "fieldName": "system.reqExecutionResults",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-req-id",
+          "fieldName": "system.reqId",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput.results.req_id}}"
+        },
+        {
+          "variableUpdateId": "vu-req-exec-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 350,
+      "height": 199
+    },
+    {
+      "id": "req_validator",
+      "type": "agent",
+      "name": "validator",
+      "description": "Validates that req was created, accounted, delivered, submitted, and approved correctly",
+      "position": { "x": 1503, "y": 102 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "req-validator-sys-001",
+            "role": "system",
+            "text": "You are the Validator for GEP's P2P Requisition Agent. Validate the execution results before building the domain event.\n\nPerform these checks:\n\n1. REQ_CREATED: Does req_id exist in results? If null, flag as REQ_CREATE_FAILED.\n\n2. ACCOUNTING_SET: Are cost_center and gl_account present and non-null in results?\n\n3. DELIVERY_SET: Are deliver_to and need_by present and non-null in results?\n\n4. SUBMISSION: Did req_submit succeed? Check req_status is not DRAFT.\n\n5. APPROVAL: Is req_status equal to APPROVED? If PENDING_APPROVAL, flag as AWAITING_MANUAL_APPROVAL.\n\n6. TOTAL_INTEGRITY: Does grand_total in results match grand_total from req intent?\n\n7. LINE_COUNT: Does the number of lines in results match the number of lines from intent?\n\nRespond ONLY with a valid JSON object:\n{\n  \"validation_passed\": true | false,\n  \"checks\": [\n    { \"check\": \"REQ_CREATED\", \"passed\": true, \"detail\": \"req_id: req-uuid\" },\n    { \"check\": \"ACCOUNTING_SET\", \"passed\": true, \"detail\": \"CC-4201 / GL-5501-IT attached\" },\n    { \"check\": \"DELIVERY_SET\", \"passed\": true, \"detail\": \"Hyderabad Office, need by 2024-12-20\" },\n    { \"check\": \"SUBMISSION\", \"passed\": true, \"detail\": \"Status: PENDING_APPROVAL\" },\n    { \"check\": \"APPROVAL\", \"passed\": true, \"detail\": \"Status: APPROVED\" },\n    { \"check\": \"TOTAL_INTEGRITY\", \"passed\": true, \"detail\": \"850000 matches intent\" },\n    { \"check\": \"LINE_COUNT\", \"passed\": true, \"detail\": \"1 line matches\" }\n  ],\n  \"issues\": [],\n  \"recommendation\": \"PROCEED\" | \"NEEDS_CLARIFICATION\" | \"ABORT\",\n  \"clarification_question\": null\n}"
+          },
+          {
+            "id": "req-validator-usr-001",
+            "role": "user",
+            "text": "Validate these requisition results:\n\nExecution Results:\n{{system.reqExecutionResults}}\n\nOriginal Req Intent:\n{{system.reqIntent}}\n\nReturn the validation report JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ReqValidationReport",
+          "description": "Validation results for requisition execution",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "validation_passed": { "type": "boolean" },
+              "checks": { "type": "array" },
+              "issues": { "type": "array" },
+              "recommendation": { "type": "string", "enum": ["PROCEED", "NEEDS_CLARIFICATION", "ABORT"] },
+              "clarification_question": {}
+            },
+            "required": ["validation_passed", "checks", "issues", "recommendation"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-val-out",
+          "fieldName": "system.reqValidationReport",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-req-val-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102
+    },
+    {
+      "id": "req_event_builder",
+      "type": "agent",
+      "name": "event_builder",
+      "description": "Builds the ReqApproved domain event for the Order agent",
+      "position": { "x": 1839, "y": 98 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "req-event-sys-001",
+            "role": "system",
+            "text": "You are the Event Builder for GEP's P2P Requisition Agent. Build a structured domain event from the requisition execution results for consumption by the Order Agent.\n\nFor successful APPROVED requisition, build ReqApproved:\n{\n  \"event_type\": \"ReqApproved\",\n  \"event_id\": \"<req_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"req_id\": \"<from results>\",\n    \"cart_id\": \"<from intent>\",\n    \"buyer_id\": \"<from intent>\",\n    \"session_id\": \"<from intent>\",\n    \"lines\": [\n      { \"item_id\": \"...\", \"item_name\": \"...\", \"sku\": \"...\", \"quantity\": ..., \"unit_price\": ..., \"line_total\": ..., \"supplier_id\": \"...\" }\n    ],\n    \"grand_total\": <number>,\n    \"cost_center\": \"...\",\n    \"gl_account\": \"...\",\n    \"deliver_to\": \"...\",\n    \"need_by\": \"...\",\n    \"approved_at\": \"...\"\n  },\n  \"routing\": {\n    \"next_node\": \"order_agent\",\n    \"requires_approval\": false\n  }\n}\n\nFor AWAITING_MANUAL_APPROVAL (validation flag), build ReqPendingApproval:\n{\n  \"event_type\": \"ReqPendingApproval\",\n  \"event_id\": \"<req_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"req_id\": \"...\",\n    \"grand_total\": <number>,\n    \"approver_message\": \"Requisition submitted and awaiting manual approval. You will be notified once approved.\"\n  },\n  \"routing\": {\n    \"next_node\": null,\n    \"requires_approval\": true\n  }\n}\n\nFor ABORT, build ReqFailed:\n{\n  \"event_type\": \"ReqFailed\",\n  \"event_id\": \"<session_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": { \"reason\": \"<issue>\", \"req_id\": \"<if exists, else null>\" },\n  \"routing\": { \"next_node\": null, \"requires_approval\": false }\n}\n\nRespond ONLY with the JSON event object."
+          },
+          {
+            "id": "req-event-usr-001",
+            "role": "user",
+            "text": "Build the domain event from:\n\nExecution Results:\n{{system.reqExecutionResults}}\n\nValidation Report:\n{{system.reqValidationReport}}\n\nReq Intent:\n{{system.reqIntent}}\n\nSession ID: {{system.sessionId}}\n\nReturn the domain event JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ReqDomainEvent",
+          "description": "Domain event for Order agent consumption",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": { "type": "string" },
+              "event_id": { "type": "string" },
+              "timestamp": { "type": "string" },
+              "payload": { "type": "object" },
+              "routing": {
+                "type": "object",
+                "properties": {
+                  "next_node": {},
+                  "requires_approval": { "type": "boolean" }
+                }
+              }
+            },
+            "required": ["event_type", "event_id", "timestamp", "payload", "routing"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-event-out",
+          "fieldName": "system.reqDomainEvent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-req-event-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102
+    },
+    {
+      "id": "req_response_builder",
+      "type": "agent",
+      "name": "response_builder",
+      "description": "Builds buyer-friendly response confirming requisition status",
+      "position": { "x": 2167, "y": 98 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "req-resp-sys-001",
+            "role": "system",
+            "text": "You are the Response Builder for GEP's P2P Requisition Agent. Write a clear, buyer-friendly response about the requisition status.\n\nFor ReqApproved:\n- Confirm requisition was created and approved\n- Show req_id for reference\n- Show a markdown table: Item | Qty | Unit Price | Line Total\n- Show grand total\n- Show cost centre and GL account attached\n- Show delivery address and need-by date\n- Confirm what happens next: Purchase Order will now be created automatically\n\nFor ReqPendingApproval:\n- Confirm req was submitted successfully\n- Show req_id\n- Explain it is awaiting manual approval\n- Tell them they will be notified when approved\n\nFor ReqFailed:\n- Explain clearly what went wrong in plain language\n- Suggest corrective action\n- Never say 'error' — say 'could not be created' or 'something went wrong'\n\nFormat in clean markdown. Keep under 250 words."
+          },
+          {
+            "id": "req-resp-usr-001",
+            "role": "user",
+            "text": "Build the buyer response from:\n\nDomain Event: {{system.reqDomainEvent}}\nValidation Report: {{system.reqValidationReport}}\nExecution Results: {{system.reqExecutionResults}}\n\nWrite the response."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": false,
+          "name": "",
+          "description": "",
+          "schema": { "type": "object", "properties": {}, "required": [], "additionalProperties": false }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-resp-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 269,
+      "height": 102
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "name": "output",
+      "description": "Final output of the Req orchestration",
+      "position": { "x": 2499, "y": 101 },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "enableImageRendering": false,
+        "outputMapping": {
+          "messages": { "type": "string", "value": "{{thread.messages}}" },
+          "files": { "type": "array", "value": "{{system.files}}" },
+          "domain_event": { "type": "object", "value": "{{system.reqDomainEvent}}" },
+          "req_id": { "type": "string", "value": "{{system.reqId}}" },
+          "validation_report": { "type": "object", "value": "{{system.reqValidationReport}}" },
+          "selectedAgentId": { "type": "string", "value": "{{runtime.workflowMetaData.workflowId}}" },
+          "selectedAgentName": { "type": "string", "value": "{{runtime.workflowMetaData.agentName}}" }
+        },
+        "outcome": { "enabled": false, "variable": "" }
+      },
+      "width": 150,
+      "height": 96
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-req-intent",
+      "source": "start",
+      "target": "req_intent_analyzer",
+      "type": "default",
+      "data": { "sourceType": "start", "targetType": "agent" }
+    },
+    {
+      "id": "edge-req-intent-planner",
+      "source": "req_intent_analyzer",
+      "target": "req_planner",
+      "style": { "strokeWidth": 3 },
+      "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } }
+    },
+    {
+      "id": "edge-req-planner-exec",
+      "source": "req_planner",
+      "target": "req_tool_executer",
+      "style": { "strokeWidth": 3 },
+      "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } }
+    },
+    {
+      "id": "edge-req-exec-validator",
+      "source": "req_tool_executer",
+      "target": "req_validator",
+      "style": { "strokeWidth": 3 },
+      "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } }
+    },
+    {
+      "id": "edge-req-validator-event",
+      "source": "req_validator",
+      "target": "req_event_builder",
+      "style": { "strokeWidth": 3 },
+      "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } }
+    },
+    {
+      "id": "edge-req-event-resp",
+      "source": "req_event_builder",
+      "target": "req_response_builder",
+      "style": { "strokeWidth": 3 },
+      "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } }
+    },
+    {
+      "id": "edge-req-resp-output",
+      "source": "req_response_builder",
+      "target": "output",
+      "style": { "strokeWidth": 3 },
+      "data": { "sourceType": "agent", "targetType": "output" }
+    }
+  ],
+  "variables": {
+    "flow": [],
+    "system": [
+      { "name": "userQuery", "type": "string", "defaultValue": "" },
+      { "name": "attachments", "type": "array", "defaultValue": [] },
+      { "name": "sessionId", "type": "string", "defaultValue": "" },
+      { "name": "cartFlipEvent", "type": "object", "defaultValue": {} },
+      { "name": "reqIntent", "type": "object", "defaultValue": {} },
+      { "name": "reqExecutionPlan", "type": "object", "defaultValue": {} },
+      { "name": "reqExecutionResults", "type": "object", "defaultValue": {} },
+      { "name": "reqId", "type": "string", "defaultValue": "" },
+      { "name": "reqValidationReport", "type": "object", "defaultValue": {} },
+      { "name": "reqDomainEvent", "type": "object", "defaultValue": {} },
+      { "name": "files", "type": "array", "defaultValue": [] }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": { "type": "string", "description": "Trigger message or CartFlipped event payload", "required": true },
+      "cartFlipEvent": { "type": "object", "description": "CartFlipped event from Catalog Agent", "required": true }
+    },
+    "outputs": {
+      "messages": { "type": "string", "description": "Full conversation thread" },
+      "domain_event": { "type": "object", "description": "ReqApproved event for Order Agent" },
+      "req_id": { "type": "string", "description": "Created requisition ID" },
+      "validation_report": { "type": "object", "description": "Validation checks and results" }
+    }
+  },
+  "skills": [],
+  "publishChannels": [
+    { "refId": "api", "code": "api", "name": "API", "description": "Expose Req Agent as REST API" },
+    { "refId": "qi-ui", "code": "qi-ui", "name": "Qi UI", "description": "Make Req Agent available in GEP Qi interface" }
+  ],
+  "security": { "activities": [{ "refId": "755000001", "code": "755000001", "name": "Home" }] }
+}

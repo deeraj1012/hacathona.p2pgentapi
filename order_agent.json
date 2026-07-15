@@ -1,0 +1,410 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "description": "Starting point of the Order orchestration",
+      "position": { "x": 150, "y": 102 },
+      "deletable": false,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": { "label": "start", "nodeType": "start", "triggerWizard": { "triggerType": "api" } },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-start-001", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.interface.inputs.message}}", "role": "user" },
+        { "variableUpdateId": "vu-ord-start-002", "fieldName": "system.files", "operation": "clear" },
+        { "variableUpdateId": "vu-ord-start-003", "fieldName": "system.userQuery", "operation": "set", "value": "{{nodeOutput.interface.inputs.message}}" },
+        { "variableUpdateId": "vu-ord-start-004", "fieldName": "system.reqApprovedEvent", "operation": "set", "value": "{{nodeOutput.interface.inputs.reqApprovedEvent}}" },
+        { "variableUpdateId": "vu-ord-start-005", "fieldName": "system.sessionId", "operation": "set", "value": "{{nodeOutput.options.sessionId}}" }
+      ],
+      "width": 250, "height": 96
+    },
+    {
+      "id": "order_intent_analyzer",
+      "type": "agent",
+      "name": "intent_analyzer",
+      "description": "Reads the ReqApproved event and extracts everything needed to create a Purchase Order",
+      "position": { "x": 500, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "ord-intent-sys-001",
+            "role": "system",
+            "text": "You are the Intent Analyzer for GEP's P2P Order Agent. You receive a ReqApproved event and extract everything needed to create a Purchase Order.\n\nFrom the ReqApproved event, extract:\n- req_id: the approved requisition ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- lines: array of line items (item_id, item_name, sku, quantity, unit_price, line_total, supplier_id)\n- grand_total: total PO value\n- supplier_id: supplier to send PO to (take from first line — all lines go to same supplier in this demo)\n- deliver_to: delivery address\n- need_by: required delivery date\n- cost_center: cost centre for reference\n- gl_account: GL account for reference\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"req_id\": \"req-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"supplier_id\": \"SUP-001\",\n  \"lines\": [{ \"item_id\": \"...\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"quantity\": 10, \"unit_price\": 85000, \"line_total\": 850000, \"supplier_id\": \"SUP-001\" }],\n  \"grand_total\": 850000,\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\"\n}"
+          },
+          {
+            "id": "ord-intent-usr-001",
+            "role": "user",
+            "text": "ReqApproved event received:\n{{system.reqApprovedEvent}}\n\nExtract all order fields and return the JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "OrderIntent",
+          "description": "Structured order data extracted from ReqApproved event",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "req_id": { "type": "string" },
+              "buyer_id": { "type": "string" },
+              "session_id": { "type": "string" },
+              "supplier_id": { "type": "string" },
+              "lines": { "type": "array" },
+              "grand_total": { "type": "number" },
+              "deliver_to": { "type": "string" },
+              "need_by": { "type": "string" },
+              "cost_center": { "type": "string" },
+              "gl_account": { "type": "string" }
+            },
+            "required": ["req_id", "supplier_id", "lines", "grand_total"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-intent-out", "fieldName": "system.orderIntent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-ord-intent-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 259, "height": 102
+    },
+    {
+      "id": "order_planner",
+      "type": "agent",
+      "name": "planner",
+      "description": "Builds execution plan for PO creation, line attachment, supplier dispatch, and finalization",
+      "position": { "x": 832, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "ord-planner-sys-001",
+            "role": "system",
+            "text": "You are the Planner for GEP's P2P Order Agent. Create an execution plan for generating and issuing a Purchase Order.\n\nAvailable order tools (will be wired via MCP later):\n1. order_create(req_id, supplier_id, lines[], grand_total, deliver_to, need_by) — Create PO from req\n2. order_get(po_id) — Get full PO details\n3. order_finalize(po_id) — Lock and issue PO, change status to ISSUED\n4. order_get_status(po_id) — Get current PO status\n\nPlanning rules:\n- ALWAYS start with order_create using req_id and supplier_id\n- ALWAYS call order_finalize after create to issue the PO\n- ALWAYS call order_get_status after finalize to confirm ISSUED status\n- Do NOT call order_get unless debugging is needed\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"order_create\", \"params\": { \"req_id\": \"req-uuid\", \"supplier_id\": \"SUP-001\", \"lines\": [...], \"grand_total\": 850000, \"deliver_to\": \"Hyderabad Office\", \"need_by\": \"2024-12-20\" }, \"purpose\": \"Create PO from approved req\" },\n    { \"step\": 2, \"tool\": \"order_finalize\", \"params\": { \"po_id\": \"{{step1.po_id}}\" }, \"purpose\": \"Issue PO to supplier\" },\n    { \"step\": 3, \"tool\": \"order_get_status\", \"params\": { \"po_id\": \"{{step1.po_id}}\" }, \"purpose\": \"Confirm ISSUED status\" }\n  ],\n  \"total_steps\": 3\n}"
+          },
+          {
+            "id": "ord-planner-usr-001",
+            "role": "user",
+            "text": "Order intent:\n{{system.orderIntent}}\n\nCreate the execution plan."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "OrderExecutionPlan",
+          "description": "Ordered execution plan for PO creation and issuance",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "execution_plan": { "type": "array", "items": { "type": "object", "properties": { "step": { "type": "integer" }, "tool": { "type": "string" }, "params": { "type": "object" }, "purpose": { "type": "string" } }, "required": ["step", "tool", "params", "purpose"] } },
+              "total_steps": { "type": "integer" }
+            },
+            "required": ["execution_plan", "total_steps"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-plan-out", "fieldName": "system.orderExecutionPlan", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-ord-plan-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "order_tool_executer",
+      "type": "agent",
+      "name": "tool_executer",
+      "description": "Executes order API calls — create PO, finalize, confirm issued",
+      "position": { "x": 1175, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "ord-exec-sys-001",
+            "role": "system",
+            "text": "You are the Tool Executor for GEP's P2P Order Agent. Execute the planned PO API calls in order.\n\nTools available (will be wired via MCP later):\n- order_create: Create a Purchase Order from an approved requisition\n- order_get: Get full PO details\n- order_finalize: Lock and issue the PO to supplier\n- order_get_status: Check current PO status\n\nExecution rules:\n1. Execute each step IN ORDER\n2. Capture po_id from step 1 (order_create) and pass it to ALL subsequent steps\n3. After order_finalize, confirm status is ISSUED via order_get_status\n4. If any step returns an error, stop and report clearly\n5. Never fabricate tool responses\n\nAfter ALL steps complete, output:\n{\n  \"status\": \"success\" | \"partial\" | \"error\",\n  \"steps_completed\": <number>,\n  \"results\": {\n    \"po_id\": \"...\",\n    \"po_status\": \"ISSUED\",\n    \"req_id\": \"...\",\n    \"supplier_id\": \"...\",\n    \"lines\": [...],\n    \"grand_total\": <number>,\n    \"deliver_to\": \"...\",\n    \"need_by\": \"...\",\n    \"issued_at\": \"...\"\n  },\n  \"error\": null\n}"
+          },
+          {
+            "id": "ord-exec-usr-001",
+            "role": "user",
+            "text": "Execute this order plan:\n\n{{system.orderExecutionPlan}}\n\nContext:\n- Session ID: {{system.sessionId}}\n- Order intent: {{system.orderIntent}}\n\nExecute each step and return the full results JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 10,
+        "structuredOutput": {
+          "enable": true,
+          "name": "OrderExecutionResults",
+          "description": "Results of PO creation and issuance",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["success", "partial", "error"] },
+              "steps_completed": { "type": "integer" },
+              "results": { "type": "object", "properties": { "po_id": { "type": "string" }, "po_status": { "type": "string" }, "req_id": { "type": "string" }, "supplier_id": { "type": "string" }, "lines": { "type": "array" }, "grand_total": { "type": "number" }, "deliver_to": { "type": "string" }, "need_by": { "type": "string" }, "issued_at": { "type": "string" } } },
+              "error": {}
+            },
+            "required": ["status", "steps_completed", "results"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": true,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-exec-out", "fieldName": "system.orderExecutionResults", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-po-id", "fieldName": "system.poId", "operation": "set", "value": "{{nodeOutput.structuredOutput.results.po_id}}" },
+        { "variableUpdateId": "vu-ord-exec-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 350, "height": 199
+    },
+    {
+      "id": "order_validator",
+      "type": "agent",
+      "name": "validator",
+      "description": "Validates PO was created, issued, and linked correctly to the requisition",
+      "position": { "x": 1503, "y": 102 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "ord-validator-sys-001",
+            "role": "system",
+            "text": "You are the Validator for GEP's P2P Order Agent. Validate the PO execution results.\n\nPerform these checks:\n\n1. PO_CREATED: Does po_id exist? If null, flag as PO_CREATE_FAILED.\n\n2. PO_ISSUED: Is po_status equal to ISSUED? If still DRAFT, flag as PO_NOT_ISSUED.\n\n3. REQ_LINK: Does req_id in results match req_id from order intent?\n\n4. SUPPLIER_ASSIGNED: Is supplier_id present and non-null?\n\n5. TOTAL_INTEGRITY: Does grand_total in results match grand_total from order intent?\n\n6. LINE_COUNT: Does the number of PO lines match the number of req lines?\n\nRespond ONLY with a valid JSON object:\n{\n  \"validation_passed\": true | false,\n  \"checks\": [\n    { \"check\": \"PO_CREATED\", \"passed\": true, \"detail\": \"po_id: po-uuid\" },\n    { \"check\": \"PO_ISSUED\", \"passed\": true, \"detail\": \"Status: ISSUED\" },\n    { \"check\": \"REQ_LINK\", \"passed\": true, \"detail\": \"req_id matches\" },\n    { \"check\": \"SUPPLIER_ASSIGNED\", \"passed\": true, \"detail\": \"SUP-001 assigned\" },\n    { \"check\": \"TOTAL_INTEGRITY\", \"passed\": true, \"detail\": \"850000 matches\" },\n    { \"check\": \"LINE_COUNT\", \"passed\": true, \"detail\": \"1 line matches\" }\n  ],\n  \"issues\": [],\n  \"recommendation\": \"PROCEED\" | \"NEEDS_CLARIFICATION\" | \"ABORT\",\n  \"clarification_question\": null\n}"
+          },
+          {
+            "id": "ord-validator-usr-001",
+            "role": "user",
+            "text": "Validate PO results:\n\nExecution Results:\n{{system.orderExecutionResults}}\n\nOrder Intent:\n{{system.orderIntent}}\n\nReturn the validation report JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "OrderValidationReport",
+          "description": "Validation results for PO execution",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "validation_passed": { "type": "boolean" },
+              "checks": { "type": "array" },
+              "issues": { "type": "array" },
+              "recommendation": { "type": "string", "enum": ["PROCEED", "NEEDS_CLARIFICATION", "ABORT"] },
+              "clarification_question": {}
+            },
+            "required": ["validation_passed", "checks", "issues", "recommendation"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-val-out", "fieldName": "system.orderValidationReport", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-ord-val-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "order_event_builder",
+      "type": "agent",
+      "name": "event_builder",
+      "description": "Builds the POIssued domain event for the GR agent",
+      "position": { "x": 1839, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "ord-event-sys-001",
+            "role": "system",
+            "text": "You are the Event Builder for GEP's P2P Order Agent. Build the POIssued domain event for the GR Agent.\n\nFor successful ISSUED PO, build POIssued:\n{\n  \"event_type\": \"POIssued\",\n  \"event_id\": \"<po_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"po_id\": \"...\",\n    \"req_id\": \"...\",\n    \"buyer_id\": \"...\",\n    \"session_id\": \"...\",\n    \"supplier_id\": \"...\",\n    \"lines\": [{ \"po_line_id\": \"...\", \"item_id\": \"...\", \"item_name\": \"...\", \"sku\": \"...\", \"qty_ordered\": ..., \"unit_price\": ..., \"line_total\": ... }],\n    \"grand_total\": <number>,\n    \"deliver_to\": \"...\",\n    \"need_by\": \"...\",\n    \"issued_at\": \"...\"\n  },\n  \"routing\": {\n    \"next_node\": \"gr_agent\",\n    \"requires_approval\": false\n  }\n}\n\nFor ABORT, build OrderFailed:\n{\n  \"event_type\": \"OrderFailed\",\n  \"event_id\": \"<session_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": { \"reason\": \"<issue>\", \"po_id\": \"<if exists, else null>\" },\n  \"routing\": { \"next_node\": null, \"requires_approval\": false }\n}\n\nRespond ONLY with the JSON event object."
+          },
+          {
+            "id": "ord-event-usr-001",
+            "role": "user",
+            "text": "Build the domain event from:\n\nExecution Results:\n{{system.orderExecutionResults}}\n\nValidation Report:\n{{system.orderValidationReport}}\n\nOrder Intent:\n{{system.orderIntent}}\n\nSession ID: {{system.sessionId}}\n\nReturn the domain event JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "OrderDomainEvent",
+          "description": "POIssued event for GR Agent",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": { "type": "string" },
+              "event_id": { "type": "string" },
+              "timestamp": { "type": "string" },
+              "payload": { "type": "object" },
+              "routing": { "type": "object", "properties": { "next_node": {}, "requires_approval": { "type": "boolean" } } }
+            },
+            "required": ["event_type", "event_id", "timestamp", "payload", "routing"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-event-out", "fieldName": "system.orderDomainEvent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-ord-event-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "order_response_builder",
+      "type": "agent",
+      "name": "response_builder",
+      "description": "Builds buyer-friendly response confirming PO was created and issued",
+      "position": { "x": 2167, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "ord-resp-sys-001",
+            "role": "system",
+            "text": "You are the Response Builder for GEP's P2P Order Agent. Write a clear, buyer-friendly response about the Purchase Order.\n\nFor POIssued:\n- Confirm PO was created and issued to supplier\n- Show po_id for reference\n- Show a markdown table: Item | Qty | Unit Price | Line Total\n- Show grand total\n- Confirm supplier name and expected delivery date\n- Tell buyer what happens next: goods receipt will be recorded when items arrive\n\nFor OrderFailed:\n- Explain what went wrong in plain language\n- Suggest corrective action\n- Never use the word 'error'\n\nFormat in clean markdown. Keep under 250 words."
+          },
+          {
+            "id": "ord-resp-usr-001",
+            "role": "user",
+            "text": "Build the buyer response from:\n\nDomain Event: {{system.orderDomainEvent}}\nValidation Report: {{system.orderValidationReport}}\nExecution Results: {{system.orderExecutionResults}}\n\nWrite the response."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": { "enable": false, "name": "", "description": "", "schema": { "type": "object", "properties": {}, "required": [], "additionalProperties": false } },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-ord-resp-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 269, "height": 102
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "name": "output",
+      "description": "Final output of the Order orchestration",
+      "position": { "x": 2499, "y": 101 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "enableImageRendering": false,
+        "outputMapping": {
+          "messages": { "type": "string", "value": "{{thread.messages}}" },
+          "files": { "type": "array", "value": "{{system.files}}" },
+          "domain_event": { "type": "object", "value": "{{system.orderDomainEvent}}" },
+          "po_id": { "type": "string", "value": "{{system.poId}}" },
+          "validation_report": { "type": "object", "value": "{{system.orderValidationReport}}" },
+          "selectedAgentId": { "type": "string", "value": "{{runtime.workflowMetaData.workflowId}}" },
+          "selectedAgentName": { "type": "string", "value": "{{runtime.workflowMetaData.agentName}}" }
+        },
+        "outcome": { "enabled": false, "variable": "" }
+      },
+      "width": 150, "height": 96
+    }
+  ],
+  "edges": [
+    { "id": "start-ord-intent", "source": "start", "target": "order_intent_analyzer", "type": "default", "data": { "sourceType": "start", "targetType": "agent" } },
+    { "id": "edge-ord-intent-planner", "source": "order_intent_analyzer", "target": "order_planner", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-ord-planner-exec", "source": "order_planner", "target": "order_tool_executer", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-ord-exec-validator", "source": "order_tool_executer", "target": "order_validator", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-ord-validator-event", "source": "order_validator", "target": "order_event_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-ord-event-resp", "source": "order_event_builder", "target": "order_response_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-ord-resp-output", "source": "order_response_builder", "target": "output", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "output" } }
+  ],
+  "variables": {
+    "flow": [],
+    "system": [
+      { "name": "userQuery", "type": "string", "defaultValue": "" },
+      { "name": "sessionId", "type": "string", "defaultValue": "" },
+      { "name": "reqApprovedEvent", "type": "object", "defaultValue": {} },
+      { "name": "orderIntent", "type": "object", "defaultValue": {} },
+      { "name": "orderExecutionPlan", "type": "object", "defaultValue": {} },
+      { "name": "orderExecutionResults", "type": "object", "defaultValue": {} },
+      { "name": "poId", "type": "string", "defaultValue": "" },
+      { "name": "orderValidationReport", "type": "object", "defaultValue": {} },
+      { "name": "orderDomainEvent", "type": "object", "defaultValue": {} },
+      { "name": "files", "type": "array", "defaultValue": [] }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": { "type": "string", "description": "Trigger message", "required": true },
+      "reqApprovedEvent": { "type": "object", "description": "ReqApproved event from Req Agent", "required": true }
+    },
+    "outputs": {
+      "messages": { "type": "string", "description": "Full conversation thread" },
+      "domain_event": { "type": "object", "description": "POIssued event for GR Agent" },
+      "po_id": { "type": "string", "description": "Created PO ID" },
+      "validation_report": { "type": "object", "description": "Validation checks and results" }
+    }
+  },
+  "skills": [],
+  "publishChannels": [
+    { "refId": "api", "code": "api", "name": "API", "description": "Expose Order Agent as REST API" },
+    { "refId": "qi-ui", "code": "qi-ui", "name": "Qi UI", "description": "Make Order Agent available in GEP Qi interface" }
+  ],
+  "security": { "activities": [{ "refId": "755000001", "code": "755000001", "name": "Home" }] }
+}

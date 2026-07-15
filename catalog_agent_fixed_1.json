@@ -1,0 +1,1045 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "description": "Starting point of the orchestration",
+      "position": {
+        "x": 150,
+        "y": 102
+      },
+      "deletable": false,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "label": "start",
+        "nodeType": "start",
+        "triggerWizard": {
+          "triggerType": "api"
+        }
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-01upbqek",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.interface.inputs.message}}",
+          "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-00bcjft7",
+          "fieldName": "system.files",
+          "operation": "clear"
+        },
+        {
+          "variableUpdateId": "vu-01mtvkpv",
+          "fieldName": "system.userQuery",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.message}}"
+        },
+        {
+          "variableUpdateId": "vu-000t9j45",
+          "fieldName": "system.attachments",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.attachments}}"
+        },
+        {
+          "variableUpdateId": "vu-01t3clkp",
+          "fieldName": "system.sessionId",
+          "operation": "set",
+          "value": "{{nodeOutput.options.sessionId}}"
+        }
+      ],
+      "width": 250,
+      "height": 96
+    },
+    {
+      "id": "agent_0",
+      "type": "agent",
+      "name": "intent_analyzer",
+      "description": "Parses the buyer's natural language input and extracts structured procurement intent",
+      "position": {
+        "x": 500,
+        "y": 98
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "intent-sys-001",
+            "role": "system",
+            "text": "You are the Intent Analyzer for GEP's P2P Catalog Agent. Your ONLY job is to extract structured procurement intent from a buyer's natural language message.\n\nExtract the following fields:\n- item_query: the item name or description they want to search for (string)\n- quantity: how many units they need (integer, default 1 if not specified)\n- category: product category if mentioned (string or null)\n- budget_per_unit: max price per unit if mentioned (number or null)\n- cost_center: accounting cost centre code if mentioned (string or null)\n- gl_account: GL account code if mentioned (string or null)\n- deliver_to: delivery location/address if mentioned (string or null)\n- need_by: required delivery date if mentioned (string or null)\n- buyer_intent: one of [SEARCH_ONLY, ADD_TO_CART, FULL_PURCHASE]\n  - SEARCH_ONLY: buyer just wants to browse or get prices\n  - ADD_TO_CART: buyer wants to add items to cart\n  - FULL_PURCHASE: buyer wants to complete an end-to-end purchase\n\nRespond ONLY with a valid JSON object. No preamble, no explanation, no markdown fences.\n\nExample output:\n{\n  \"item_query\": \"HP laptop\",\n  \"quantity\": 10,\n  \"category\": \"laptop\",\n  \"budget_per_unit\": null,\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\",\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"buyer_intent\": \"FULL_PURCHASE\"\n}\n\nIf a field is not mentioned, set it to null. Never hallucinate values."
+          },
+          {
+            "id": "intent-usr-001",
+            "role": "user",
+            "text": "Buyer message: {{system.userQuery}}\n\nExtract the procurement intent as a JSON object."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ProcurementIntent",
+          "description": "Structured procurement intent extracted from buyer message",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "item_query": {
+                "type": "string"
+              },
+              "quantity": {
+                "type": "integer"
+              },
+              "category": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "budget_per_unit": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "cost_center": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "gl_account": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "deliver_to": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "need_by": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "buyer_intent": {
+                "type": "string",
+                "enum": [
+                  "SEARCH_ONLY",
+                  "ADD_TO_CART",
+                  "FULL_PURCHASE"
+                ]
+              }
+            },
+            "required": [
+              "item_query",
+              "quantity",
+              "buyer_intent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-intent-out",
+          "fieldName": "system.procurementIntent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-01umu6ua",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 259,
+      "height": 102
+    },
+    {
+      "id": "l4sshfc",
+      "type": "agent",
+      "name": "planner",
+      "description": "Decides which catalog API calls to make based on the extracted intent",
+      "position": {
+        "x": 832,
+        "y": 98
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "planner-sys-001",
+            "role": "system",
+            "text": "You are the Planner for GEP's P2P Catalog Agent. Your job is to create an ordered execution plan of API calls based on the buyer's procurement intent.\n\nAvailable catalog tools (will be wired via MCP later):\n1. catalog_search(query, category?, max_price?) — Search items in the catalog\n2. catalog_get_item(item_id) — Get full details of a specific item\n3. cart_create(buyer_id) — Create a new cart session\n4. cart_add_item(cart_id, item_id, quantity) — Add item to cart\n5. cart_view(cart_id) — View cart contents and total\n6. cart_flip(cart_id) — Finalise cart and hand off to Req node\n\nRules:\n- SEARCH_ONLY intent: plan = [catalog_search]\n- ADD_TO_CART intent: plan = [catalog_search, cart_create, cart_add_item, cart_view]\n- FULL_PURCHASE intent: plan = [catalog_search, cart_create, cart_add_item, cart_view, cart_flip]\n- Always search before adding to cart — you need the item_id from search results\n- cart_flip is only the last step for FULL_PURCHASE\n\nRespond ONLY with a valid JSON object. No preamble, no markdown.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"catalog_search\", \"params\": { \"query\": \"HP laptop\", \"category\": \"laptop\" }, \"purpose\": \"Find matching catalog items\" },\n    { \"step\": 2, \"tool\": \"cart_create\", \"params\": { \"buyer_id\": \"{{system.buyerId}}\" }, \"purpose\": \"Initialise cart for buyer\" },\n    { \"step\": 3, \"tool\": \"cart_add_item\", \"params\": { \"cart_id\": \"{{step2.cart_id}}\", \"item_id\": \"{{step1.best_match_id}}\", \"quantity\": 10 }, \"purpose\": \"Add 10 HP laptops to cart\" },\n    { \"step\": 4, \"tool\": \"cart_view\", \"params\": { \"cart_id\": \"{{step2.cart_id}}\" }, \"purpose\": \"Confirm cart contents\" },\n    { \"step\": 5, \"tool\": \"cart_flip\", \"params\": { \"cart_id\": \"{{step2.cart_id}}\" }, \"purpose\": \"Send cart to requisition\" }\n  ],\n  \"total_steps\": 5,\n  \"intent\": \"FULL_PURCHASE\"\n}"
+          },
+          {
+            "id": "planner-usr-001",
+            "role": "user",
+            "text": "Procurement intent:\n{{system.procurementIntent}}\n\nOriginal buyer message: {{system.userQuery}}\n\nCreate the execution plan as a JSON object."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ExecutionPlan",
+          "description": "Ordered list of catalog API calls to execute",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "execution_plan": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "type": "integer"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "step",
+                    "tool",
+                    "params",
+                    "purpose"
+                  ]
+                }
+              },
+              "total_steps": {
+                "type": "integer"
+              },
+              "intent": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "execution_plan",
+              "total_steps",
+              "intent"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-plan-out",
+          "fieldName": "system.executionPlan",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-003m91q3",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102
+    },
+    {
+      "id": "vzke7q4",
+      "type": "agent",
+      "name": "tool_executer",
+      "description": "Executes the catalog API calls via MCP tools and collects results",
+      "position": {
+        "x": 1175,
+        "y": 98
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "executor-sys-001",
+            "role": "system",
+            "text": "You are the Tool Executor for GEP's P2P Catalog Agent. Your job is to execute the planned catalog API calls in order using the MCP tools available to you.\n\nTools available (will be wired via MCP):\n- catalog_search: Search the GEP catalog for items\n- catalog_get_item: Get detailed info for a specific item\n- cart_create: Create a new shopping cart\n- cart_add_item: Add an item and quantity to a cart\n- cart_view: View the current cart contents\n- cart_flip: Finalise the cart and send it to requisition\n\nExecution rules:\n1. Execute each step in the plan IN ORDER — do not skip steps\n2. After catalog_search, pick the BEST matching item (closest name match + within budget if specified)\n3. Pass the item_id from search results into cart_add_item — never guess item IDs\n4. After every tool call, check the response for errors. If a tool returns an error, stop and report it clearly\n5. After cart_view, confirm the total and line items before calling cart_flip\n6. When cart_flip succeeds, capture the cart_id and event payload for downstream nodes\n\nAfter ALL steps complete, output a JSON object:\n{\n  \"status\": \"success\" | \"partial\" | \"error\",\n  \"steps_completed\": <number>,\n  \"results\": {\n    \"search_results\": [...],\n    \"selected_item\": { item details },\n    \"cart_id\": \"...\",\n    \"cart_contents\": { ... },\n    \"cart_flipped\": true/false,\n    \"cart_flip_event\": { ... }\n  },\n  \"error\": null or \"error message if failed\"\n}\n\nNever fabricate tool responses. Only report what the tools actually returned."
+          },
+          {
+            "id": "executor-usr-001",
+            "role": "user",
+            "text": "Execute this plan using the MCP catalog tools:\n\n{{system.executionPlan}}\n\nBuyer context:\n- Session ID: {{system.sessionId}}\n- Original query: {{system.userQuery}}\n- Intent details: {{system.procurementIntent}}\n\nExecute each step in order and return the full results JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 10,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ExecutionResults",
+          "description": "Results of all catalog tool executions",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "success",
+                  "partial",
+                  "error"
+                ]
+              },
+              "steps_completed": {
+                "type": "integer"
+              },
+              "results": {
+                "type": "object",
+                "properties": {
+                  "search_results": {
+                    "type": "array"
+                  },
+                  "selected_item": {
+                    "type": "object"
+                  },
+                  "cart_id": {
+                    "type": "string"
+                  },
+                  "cart_contents": {
+                    "type": "object"
+                  },
+                  "cart_flipped": {
+                    "type": "boolean"
+                  },
+                  "cart_flip_event": {
+                    "type": "object"
+                  }
+                }
+              },
+              "error": {}
+            },
+            "required": [
+              "status",
+              "steps_completed",
+              "results"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": true,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-exec-out",
+          "fieldName": "system.executionResults",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-cart-id",
+          "fieldName": "system.cartId",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput.results.cart_id}}"
+        },
+        {
+          "variableUpdateId": "vu-flip-event",
+          "fieldName": "system.cartFlipEvent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput.results.cart_flip_event}}"
+        },
+        {
+          "variableUpdateId": "vu-01pktf53",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 350,
+      "height": 199
+    },
+    {
+      "id": "352lwjp",
+      "type": "agent",
+      "name": "validator",
+      "description": "Validates execution results — checks for errors, discrepancies, missing items, or budget overruns",
+      "position": {
+        "x": 1503,
+        "y": 102
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "validator-sys-001",
+            "role": "system",
+            "text": "You are the Validator for GEP's P2P Catalog Agent. Your job is to validate the execution results and catch any issues before building the final response.\n\nCheck ALL of the following:\n\n1. EXECUTION_STATUS: Did all planned steps complete? If status is 'error' or 'partial', flag it.\n\n2. ITEM_MATCH: Does the selected item actually match what the buyer asked for?\n   - Is it the right product type?\n   - If no items found, flag as NO_ITEMS_FOUND\n\n3. QUANTITY: Was the correct quantity added to cart?\n   - Compare cart line quantity vs buyer's requested quantity from intent\n\n4. BUDGET: If buyer specified a budget_per_unit, does the selected item's unit_price exceed it?\n   - If over budget, flag as OVER_BUDGET with the delta amount\n\n5. CART_INTEGRITY: Do the cart line totals add up correctly?\n   - line_total should equal unit_price x quantity\n   - grand_total should equal sum of all line_totals\n\n6. FLIP_READINESS: For FULL_PURCHASE intent, was cart_flip successful?\n   - If cart_flip_event is null or empty, flag as FLIP_FAILED\n\nRespond ONLY with a valid JSON object:\n{\n  \"validation_passed\": true | false,\n  \"checks\": [\n    { \"check\": \"EXECUTION_STATUS\", \"passed\": true, \"detail\": \"All 5 steps completed\" },\n    { \"check\": \"ITEM_MATCH\", \"passed\": true, \"detail\": \"HP EliteBook 840 G10 matches HP laptop\" },\n    { \"check\": \"QUANTITY\", \"passed\": true, \"detail\": \"10 units added as requested\" },\n    { \"check\": \"BUDGET\", \"passed\": true, \"detail\": \"Unit price within budget\" },\n    { \"check\": \"CART_INTEGRITY\", \"passed\": true, \"detail\": \"10 x 85000 = 850000 verified\" },\n    { \"check\": \"FLIP_READINESS\", \"passed\": true, \"detail\": \"CartFlipped event emitted\" }\n  ],\n  \"issues\": [],\n  \"recommendation\": \"PROCEED\" | \"NEEDS_CLARIFICATION\" | \"ABORT\",\n  \"clarification_question\": null\n}"
+          },
+          {
+            "id": "validator-usr-001",
+            "role": "user",
+            "text": "Validate these execution results:\n\nExecution Results:\n{{system.executionResults}}\n\nOriginal buyer intent:\n{{system.procurementIntent}}\n\nOriginal query: {{system.userQuery}}\n\nReturn the validation report JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "ValidationReport",
+          "description": "Validation results for the catalog execution",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "validation_passed": {
+                "type": "boolean"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "check": {
+                      "type": "string"
+                    },
+                    "passed": {
+                      "type": "boolean"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "issues": {
+                "type": "array"
+              },
+              "recommendation": {
+                "type": "string",
+                "enum": [
+                  "PROCEED",
+                  "NEEDS_CLARIFICATION",
+                  "ABORT"
+                ]
+              },
+              "clarification_question": {}
+            },
+            "required": [
+              "validation_passed",
+              "checks",
+              "issues",
+              "recommendation"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-validation-out",
+          "fieldName": "system.validationReport",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-0022rncw",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102
+    },
+    {
+      "id": "al94c4t",
+      "type": "agent",
+      "name": "event_builder",
+      "description": "Builds the CartFlipped domain event payload for downstream Req node consumption",
+      "position": {
+        "x": 1839,
+        "y": 98
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "eventbuilder-sys-001",
+            "role": "system",
+            "text": "You are the Event Builder for GEP's P2P Catalog Agent. Your job is to construct clean structured domain events from execution results for consumption by downstream agents.\n\nBased on the execution results and validation report, build the appropriate event.\n\nFor successful FULL_PURCHASE, build CartFlipped:\n{\n  \"event_type\": \"CartFlipped\",\n  \"event_id\": \"<cart_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"cart_id\": \"<from results>\",\n    \"buyer_id\": \"<from session>\",\n    \"session_id\": \"<from system.sessionId>\",\n    \"lines\": [\n      {\n        \"item_id\": \"<item_id>\",\n        \"item_name\": \"<item_name>\",\n        \"sku\": \"<sku>\",\n        \"quantity\": <qty>,\n        \"unit_price\": <price>,\n        \"line_total\": <qty x price>,\n        \"supplier_id\": \"<supplier_id>\"\n      }\n    ],\n    \"grand_total\": <sum of line_totals>,\n    \"cost_center\": \"<from intent or null>\",\n    \"gl_account\": \"<from intent or null>\",\n    \"deliver_to\": \"<from intent or null>\",\n    \"need_by\": \"<from intent or null>\"\n  },\n  \"routing\": {\n    \"next_node\": \"req_agent\",\n    \"requires_approval\": true\n  }\n}\n\nFor SEARCH_ONLY or ADD_TO_CART, build CatalogSearchCompleted:\n{\n  \"event_type\": \"CatalogSearchCompleted\",\n  \"event_id\": \"<session_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"search_results\": [...],\n    \"selected_item\": {...},\n    \"cart_id\": \"<if cart created, else null>\"\n  },\n  \"routing\": {\n    \"next_node\": null,\n    \"requires_approval\": false\n  }\n}\n\nFor ABORT recommendation, build CatalogFailed:\n{\n  \"event_type\": \"CatalogFailed\",\n  \"event_id\": \"<session_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"reason\": \"<validation issue>\",\n    \"original_query\": \"<buyer query>\"\n  },\n  \"routing\": {\n    \"next_node\": null,\n    \"requires_approval\": false\n  }\n}\n\nRespond ONLY with the JSON event object. No preamble."
+          },
+          {
+            "id": "eventbuilder-usr-001",
+            "role": "user",
+            "text": "Build the domain event from:\n\nExecution Results:\n{{system.executionResults}}\n\nValidation Report:\n{{system.validationReport}}\n\nProcurement Intent:\n{{system.procurementIntent}}\n\nSession ID: {{system.sessionId}}\n\nBuild and return the domain event JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "DomainEvent",
+          "description": "Domain event for downstream agent consumption",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": {
+                "type": "string"
+              },
+              "event_id": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "payload": {
+                "type": "object"
+              },
+              "routing": {
+                "type": "object",
+                "properties": {
+                  "next_node": {},
+                  "requires_approval": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "required": [
+              "event_type",
+              "event_id",
+              "timestamp",
+              "payload",
+              "routing"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-event-out",
+          "fieldName": "system.domainEvent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-001nq1lb",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102
+    },
+    {
+      "id": "jdcoa2j",
+      "type": "agent",
+      "name": "response_builder",
+      "description": "Builds a clear buyer-friendly natural language response summarising what was accomplished",
+      "position": {
+        "x": 2167,
+        "y": 98
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "respbuilder-sys-001",
+            "role": "system",
+            "text": "You are the Response Builder for GEP's P2P Catalog Agent. Write a clear, concise, buyer-friendly response summarising what was accomplished.\n\nTone: Professional but conversational. Like a smart procurement assistant talking to a busy manager.\n\nFor CartFlipped (FULL_PURCHASE success):\n- Confirm what was found, quantity, and price\n- Show a clean markdown table of cart contents\n- Show the grand total prominently\n- Confirm the cart has been sent to requisition\n- Mention what happens next (approval workflow)\n- Include the cart_id for reference\n- Confirm cost_center and GL account if provided\n\nFor CatalogSearchCompleted (SEARCH_ONLY):\n- Show the top 3-5 search results with name, SKU, and price\n- Ask if the buyer wants to add any items to cart\n\nFor ADD_TO_CART success:\n- Confirm items added, show cart summary\n- Ask if buyer wants to proceed to full purchase\n\nFor NEEDS_CLARIFICATION:\n- Explain what was found but flag the issue\n- Ask the clarification question from the validation report\n- Offer the closest alternative if applicable\n\nFor CatalogFailed / ABORT:\n- Be honest about what went wrong in plain language\n- Suggest what the buyer can try\n- Never use the word 'error' — say 'I could not find' or 'Something went wrong'\n\nFormat in clean markdown. Keep under 200 words unless showing a detailed cart."
+          },
+          {
+            "id": "respbuilder-usr-001",
+            "role": "user",
+            "text": "Build the buyer response from:\n\nDomain Event: {{system.domainEvent}}\nValidation Report: {{system.validationReport}}\nExecution Results: {{system.executionResults}}\nOriginal Query: {{system.userQuery}}\n\nWrite the natural language response for the buyer."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": false,
+          "name": "",
+          "description": "",
+          "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-017h7s7e",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 269,
+      "height": 102
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "name": "output",
+      "description": "Final output of the orchestration",
+      "position": {
+        "x": 2499,
+        "y": 101
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "enableImageRendering": false,
+        "outputMapping": {
+          "messages": {
+            "type": "string",
+            "value": "{{thread.messages}}"
+          },
+          "files": {
+            "type": "array",
+            "value": "{{system.files}}"
+          },
+          "domain_event": {
+            "type": "object",
+            "value": "{{system.domainEvent}}"
+          },
+          "cart_id": {
+            "type": "string",
+            "value": "{{system.cartId}}"
+          },
+          "cart_flip_event": {
+            "type": "object",
+            "value": "{{system.cartFlipEvent}}"
+          },
+          "validation_report": {
+            "type": "object",
+            "value": "{{system.validationReport}}"
+          },
+          "selectedAgentId": {
+            "type": "string",
+            "value": "{{runtime.workflowMetaData.workflowId}}"
+          },
+          "selectedAgentName": {
+            "type": "string",
+            "value": "{{runtime.workflowMetaData.agentName}}"
+          }
+        },
+        "outcome": {
+          "enabled": false,
+          "variable": ""
+        }
+      },
+      "width": 150,
+      "height": 96
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-agent_0",
+      "source": "start",
+      "target": "agent_0",
+      "type": "default",
+      "data": {
+        "sourceType": "start",
+        "targetType": "agent"
+      }
+    },
+    {
+      "id": "reactflow__edge-agent_0-l4sshfc",
+      "source": "agent_0",
+      "sourceHandle": null,
+      "target": "l4sshfc",
+      "targetHandle": null,
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "reactflow__edge-l4sshfc-vzke7q4",
+      "source": "l4sshfc",
+      "sourceHandle": null,
+      "target": "vzke7q4",
+      "targetHandle": null,
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "reactflow__edge-vzke7q4-352lwjp",
+      "source": "vzke7q4",
+      "sourceHandle": null,
+      "target": "352lwjp",
+      "targetHandle": null,
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "reactflow__edge-352lwjp-al94c4t",
+      "source": "352lwjp",
+      "sourceHandle": null,
+      "target": "al94c4t",
+      "targetHandle": null,
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "reactflow__edge-al94c4t-jdcoa2j",
+      "source": "al94c4t",
+      "sourceHandle": null,
+      "target": "jdcoa2j",
+      "targetHandle": null,
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "reactflow__edge-jdcoa2j-output",
+      "source": "jdcoa2j",
+      "sourceHandle": null,
+      "target": "output",
+      "targetHandle": null,
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "output"
+      }
+    }
+  ],
+  "variables": {
+    "flow": [],
+    "system": [
+      {
+        "name": "userQuery",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "name": "attachments",
+        "type": "array",
+        "defaultValue": []
+      },
+      {
+        "name": "sessionId",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "name": "buyerId",
+        "type": "string",
+        "defaultValue": "BUYER-001"
+      },
+      {
+        "name": "procurementIntent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "name": "executionPlan",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "name": "executionResults",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "name": "cartId",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "name": "cartFlipEvent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "name": "validationReport",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "name": "domainEvent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "name": "files",
+        "type": "array",
+        "defaultValue": []
+      }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": {
+        "type": "string",
+        "description": "Buyer's natural language purchase request",
+        "required": true
+      },
+      "attachments": {
+        "type": "array",
+        "description": "Optional file attachments",
+        "required": false
+      }
+    },
+    "outputs": {
+      "messages": {
+        "type": "string",
+        "description": "Full conversation thread"
+      },
+      "domain_event": {
+        "type": "object",
+        "description": "CartFlipped or CatalogSearchCompleted event for downstream agents"
+      },
+      "cart_id": {
+        "type": "string",
+        "description": "Cart ID if cart was created"
+      },
+      "cart_flip_event": {
+        "type": "object",
+        "description": "CartFlipped event payload with all line items"
+      },
+      "validation_report": {
+        "type": "object",
+        "description": "Validation checks and results"
+      }
+    }
+  },
+  "skills": [],
+  "publishChannels": [
+    {
+      "refId": "api",
+      "code": "api",
+      "name": "API",
+      "description": "Expose the Catalog Agent as a REST API"
+    },
+    {
+      "refId": "qi-ui",
+      "code": "qi-ui",
+      "name": "Qi UI",
+      "description": "Make the Catalog Agent available in GEP Qi interface"
+    }
+  ],
+  "security": {
+    "activities": [
+      {
+        "refId": "755000001",
+        "code": "755000001",
+        "name": "Home"
+      }
+    ]
+  }
+}

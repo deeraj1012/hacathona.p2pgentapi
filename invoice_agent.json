@@ -1,0 +1,424 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "description": "Starting point of the Invoice orchestration",
+      "position": { "x": 150, "y": 102 },
+      "deletable": false,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": { "label": "start", "nodeType": "start", "triggerWizard": { "triggerType": "api" } },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-start-001", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.interface.inputs.message}}", "role": "user" },
+        { "variableUpdateId": "vu-inv-start-002", "fieldName": "system.files", "operation": "clear" },
+        { "variableUpdateId": "vu-inv-start-003", "fieldName": "system.userQuery", "operation": "set", "value": "{{nodeOutput.interface.inputs.message}}" },
+        { "variableUpdateId": "vu-inv-start-004", "fieldName": "system.grConfirmedEvent", "operation": "set", "value": "{{nodeOutput.interface.inputs.grConfirmedEvent}}" },
+        { "variableUpdateId": "vu-inv-start-005", "fieldName": "system.sessionId", "operation": "set", "value": "{{nodeOutput.options.sessionId}}" }
+      ],
+      "width": 250, "height": 96
+    },
+    {
+      "id": "invoice_intent_analyzer",
+      "type": "agent",
+      "name": "intent_analyzer",
+      "description": "Reads the GRConfirmed event and extracts everything needed for invoice creation and 3-way match",
+      "position": { "x": 500, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "inv-intent-sys-001",
+            "role": "system",
+            "text": "You are the Intent Analyzer for GEP's P2P Invoice Agent. You receive a GRConfirmed event and extract everything needed to create an invoice and run 3-way match.\n\nFrom the GRConfirmed event, extract:\n- gr_id: the Goods Receipt ID\n- po_id: the Purchase Order ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- lines_received: array of received lines with quantities and values\n  - For each line extract: po_line_id, item_id, item_name, sku, qty_ordered, qty_received, unit_price, received_value\n- total_received_value: total value of goods actually received\n- received_at: timestamp of receipt\n\nAlso set:\n- invoice_amount: should equal total_received_value (we invoice for what was received)\n- match_tolerance_pct: 2 (2% tolerance for price matching)\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"gr_id\": \"gr-uuid\",\n  \"po_id\": \"po-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"lines_received\": [{ \"po_line_id\": \"line-uuid\", \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"qty_ordered\": 10, \"qty_received\": 10, \"unit_price\": 85000, \"received_value\": 850000 }],\n  \"total_received_value\": 850000,\n  \"received_at\": \"2024-12-15T10:30:00Z\",\n  \"invoice_amount\": 850000,\n  \"match_tolerance_pct\": 2\n}"
+          },
+          {
+            "id": "inv-intent-usr-001",
+            "role": "user",
+            "text": "GRConfirmed event received:\n{{system.grConfirmedEvent}}\n\nExtract all invoice fields and return the JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "InvoiceIntent",
+          "description": "Structured invoice data extracted from GRConfirmed event",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "gr_id": { "type": "string" },
+              "po_id": { "type": "string" },
+              "buyer_id": { "type": "string" },
+              "session_id": { "type": "string" },
+              "lines_received": { "type": "array" },
+              "total_received_value": { "type": "number" },
+              "received_at": { "type": "string" },
+              "invoice_amount": { "type": "number" },
+              "match_tolerance_pct": { "type": "number" }
+            },
+            "required": ["gr_id", "po_id", "lines_received", "total_received_value", "invoice_amount"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-intent-out", "fieldName": "system.invoiceIntent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-inv-intent-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 259, "height": 102
+    },
+    {
+      "id": "invoice_planner",
+      "type": "agent",
+      "name": "planner",
+      "description": "Builds execution plan for invoice creation, 3-way match, approval, and finalization",
+      "position": { "x": 832, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "inv-planner-sys-001",
+            "role": "system",
+            "text": "You are the Planner for GEP's P2P Invoice Agent. Create an execution plan for invoice processing.\n\nAvailable invoice tools (will be wired via MCP later):\n1. invoice_create(gr_id, po_id, lines[], total_amount) — Create invoice from GR confirmation\n2. invoice_match(inv_id) — Run 3-way match: PO qty x price vs GR qty vs Invoice qty x price\n3. invoice_get_match_result(inv_id) — Get detailed match result with deltas per line\n4. invoice_approve(inv_id) — Approve invoice (auto if match passes, manual if mismatch)\n5. invoice_finalize(inv_id) — Finalise payment, emit InvoicePaid event\n\nPlanning rules:\n- ALWAYS start with invoice_create using gr_id and po_id\n- ALWAYS call invoice_match after create — this is the 3-way match\n- ALWAYS call invoice_get_match_result to get the detailed result\n- If match passes (within 2% tolerance): call invoice_approve then invoice_finalize\n- If match fails: still call invoice_approve (flag for manual review) then invoice_finalize\n- NEVER skip any step\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"invoice_create\", \"params\": { \"gr_id\": \"gr-uuid\", \"po_id\": \"po-uuid\", \"lines\": [...], \"total_amount\": 850000 }, \"purpose\": \"Create invoice from GR\" },\n    { \"step\": 2, \"tool\": \"invoice_match\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Run 3-way match\" },\n    { \"step\": 3, \"tool\": \"invoice_get_match_result\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Get detailed match results\" },\n    { \"step\": 4, \"tool\": \"invoice_approve\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Approve invoice\" },\n    { \"step\": 5, \"tool\": \"invoice_finalize\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Finalise payment\" }\n  ],\n  \"total_steps\": 5\n}"
+          },
+          {
+            "id": "inv-planner-usr-001",
+            "role": "user",
+            "text": "Invoice intent:\n{{system.invoiceIntent}}\n\nCreate the execution plan."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "InvoiceExecutionPlan",
+          "description": "Ordered execution plan for invoice processing",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "execution_plan": { "type": "array", "items": { "type": "object", "properties": { "step": { "type": "integer" }, "tool": { "type": "string" }, "params": { "type": "object" }, "purpose": { "type": "string" } }, "required": ["step", "tool", "params", "purpose"] } },
+              "total_steps": { "type": "integer" }
+            },
+            "required": ["execution_plan", "total_steps"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-plan-out", "fieldName": "system.invoiceExecutionPlan", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-inv-plan-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "invoice_tool_executer",
+      "type": "agent",
+      "name": "tool_executer",
+      "description": "Executes invoice API calls — create, 3-way match, approve, finalize",
+      "position": { "x": 1175, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "inv-exec-sys-001",
+            "role": "system",
+            "text": "You are the Tool Executor for GEP's P2P Invoice Agent. This is the most important node in the entire P2P flow — the 3-way match is the core of procurement integrity.\n\nTools available (will be wired via MCP later):\n- invoice_create: Create invoice from GR confirmation\n- invoice_match: Run 3-way match comparing PO, GR, and Invoice\n- invoice_get_match_result: Get per-line match results with exact deltas\n- invoice_approve: Approve invoice\n- invoice_finalize: Finalise and emit InvoicePaid\n\nExecution rules:\n1. Execute each step IN ORDER\n2. Capture inv_id from step 1 (invoice_create)\n3. The 3-way match (invoice_match) checks:\n   - PO qty x unit_price vs GR qty_received vs Invoice qty x unit_price\n   - Within 2% tolerance = MATCHED\n   - Outside tolerance = MISMATCH with exact delta\n4. Capture match_result fully — this is the key output judges will see\n5. Call invoice_approve regardless of match result (MATCHED = auto-approve, MISMATCH = flag)\n6. Call invoice_finalize to complete the P2P cycle\n7. Never fabricate tool responses\n\nAfter ALL steps complete, output:\n{\n  \"status\": \"success\" | \"partial\" | \"error\",\n  \"steps_completed\": <number>,\n  \"results\": {\n    \"inv_id\": \"...\",\n    \"inv_number\": \"INV-2024-001\",\n    \"po_id\": \"...\",\n    \"gr_id\": \"...\",\n    \"match_status\": \"MATCHED\" | \"MISMATCH\",\n    \"match_result\": {\n      \"overall\": \"MATCHED\" | \"MISMATCH\",\n      \"lines\": [\n        {\n          \"item_name\": \"...\",\n          \"po_qty\": ..., \"po_price\": ..., \"po_total\": ...,\n          \"gr_qty\": ...,\n          \"inv_qty\": ..., \"inv_price\": ..., \"inv_total\": ...,\n          \"qty_match\": true | false,\n          \"price_match\": true | false,\n          \"delta\": 0\n        }\n      ]\n    },\n    \"total_amount\": <number>,\n    \"approved_at\": \"...\",\n    \"paid_at\": \"...\"\n  },\n  \"error\": null\n}"
+          },
+          {
+            "id": "inv-exec-usr-001",
+            "role": "user",
+            "text": "Execute this invoice plan:\n\n{{system.invoiceExecutionPlan}}\n\nContext:\n- Session ID: {{system.sessionId}}\n- Invoice intent: {{system.invoiceIntent}}\n\nExecute each step and return the full results JSON including the complete 3-way match result."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 10,
+        "structuredOutput": {
+          "enable": true,
+          "name": "InvoiceExecutionResults",
+          "description": "Results of invoice creation, 3-way match, approval, and finalization",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["success", "partial", "error"] },
+              "steps_completed": { "type": "integer" },
+              "results": {
+                "type": "object",
+                "properties": {
+                  "inv_id": { "type": "string" },
+                  "inv_number": { "type": "string" },
+                  "po_id": { "type": "string" },
+                  "gr_id": { "type": "string" },
+                  "match_status": { "type": "string" },
+                  "match_result": { "type": "object" },
+                  "total_amount": { "type": "number" },
+                  "approved_at": { "type": "string" },
+                  "paid_at": { "type": "string" }
+                }
+              },
+              "error": {}
+            },
+            "required": ["status", "steps_completed", "results"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": true,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-exec-out", "fieldName": "system.invoiceExecutionResults", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-inv-id", "fieldName": "system.invId", "operation": "set", "value": "{{nodeOutput.structuredOutput.results.inv_id}}" },
+        { "variableUpdateId": "vu-inv-exec-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 350, "height": 199
+    },
+    {
+      "id": "invoice_validator",
+      "type": "agent",
+      "name": "validator",
+      "description": "Validates invoice was created, 3-way match ran correctly, and payment was finalized",
+      "position": { "x": 1503, "y": 102 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "inv-validator-sys-001",
+            "role": "system",
+            "text": "You are the Validator for GEP's P2P Invoice Agent. This is the final validation in the entire P2P cycle.\n\nPerform these checks:\n\n1. INVOICE_CREATED: Does inv_id exist? If null, flag as INVOICE_CREATE_FAILED.\n\n2. THREE_WAY_MATCH_RAN: Does match_result exist with line-level details?\n\n3. MATCH_STATUS: Is match_status MATCHED or MISMATCH?\n   - MATCHED: all quantities and prices within 2% tolerance — perfect\n   - MISMATCH: flag with exact delta values per line\n\n4. PO_LINK: Does po_id in results match po_id from invoice intent?\n\n5. GR_LINK: Does gr_id in results match gr_id from invoice intent?\n\n6. TOTAL_INTEGRITY: Does total_amount match total_received_value from invoice intent?\n\n7. PAYMENT_FINALIZED: Is paid_at timestamp present (not null)?\n\nRespond ONLY with valid JSON:\n{\n  \"validation_passed\": true | false,\n  \"match_passed\": true | false,\n  \"checks\": [\n    { \"check\": \"INVOICE_CREATED\", \"passed\": true, \"detail\": \"inv_id: inv-uuid\" },\n    { \"check\": \"THREE_WAY_MATCH_RAN\", \"passed\": true, \"detail\": \"Match ran on 1 line\" },\n    { \"check\": \"MATCH_STATUS\", \"passed\": true, \"detail\": \"MATCHED — all quantities and prices within tolerance\" },\n    { \"check\": \"PO_LINK\", \"passed\": true, \"detail\": \"po_id matches\" },\n    { \"check\": \"GR_LINK\", \"passed\": true, \"detail\": \"gr_id matches\" },\n    { \"check\": \"TOTAL_INTEGRITY\", \"passed\": true, \"detail\": \"850000 matches received value\" },\n    { \"check\": \"PAYMENT_FINALIZED\", \"passed\": true, \"detail\": \"Paid at 2024-12-15T11:00:00Z\" }\n  ],\n  \"match_details\": [],\n  \"issues\": [],\n  \"recommendation\": \"PROCEED\" | \"NEEDS_CLARIFICATION\" | \"ABORT\",\n  \"clarification_question\": null\n}"
+          },
+          {
+            "id": "inv-validator-usr-001",
+            "role": "user",
+            "text": "Validate invoice results:\n\nExecution Results:\n{{system.invoiceExecutionResults}}\n\nInvoice Intent:\n{{system.invoiceIntent}}\n\nReturn the validation report JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "InvoiceValidationReport",
+          "description": "Validation results for invoice and 3-way match",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "validation_passed": { "type": "boolean" },
+              "match_passed": { "type": "boolean" },
+              "checks": { "type": "array" },
+              "match_details": { "type": "array" },
+              "issues": { "type": "array" },
+              "recommendation": { "type": "string", "enum": ["PROCEED", "NEEDS_CLARIFICATION", "ABORT"] },
+              "clarification_question": {}
+            },
+            "required": ["validation_passed", "match_passed", "checks", "issues", "recommendation"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-val-out", "fieldName": "system.invoiceValidationReport", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-inv-val-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "invoice_event_builder",
+      "type": "agent",
+      "name": "event_builder",
+      "description": "Builds InvoicePaid event — the final event in the entire P2P cycle",
+      "position": { "x": 1839, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "inv-event-sys-001",
+            "role": "system",
+            "text": "You are the Event Builder for GEP's P2P Invoice Agent. Build the final domain event that closes the P2P cycle.\n\nFor successful PAID invoice, build InvoicePaid:\n{\n  \"event_type\": \"InvoicePaid\",\n  \"event_id\": \"<inv_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"inv_id\": \"...\",\n    \"inv_number\": \"...\",\n    \"po_id\": \"...\",\n    \"gr_id\": \"...\",\n    \"buyer_id\": \"...\",\n    \"session_id\": \"...\",\n    \"match_status\": \"MATCHED\",\n    \"total_amount\": <number>,\n    \"paid_at\": \"...\",\n    \"p2p_cycle_complete\": true,\n    \"cycle_summary\": {\n      \"catalog_to_cart\": \"completed\",\n      \"requisition_approved\": \"completed\",\n      \"purchase_order_issued\": \"completed\",\n      \"goods_received\": \"completed\",\n      \"invoice_matched_and_paid\": \"completed\"\n    }\n  },\n  \"routing\": { \"next_node\": null, \"requires_approval\": false }\n}\n\nFor MISMATCH invoice (still paid but flagged), build InvoicePaidWithException:\n{\n  \"event_type\": \"InvoicePaidWithException\",\n  \"event_id\": \"<inv_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"inv_id\": \"...\",\n    \"po_id\": \"...\",\n    \"gr_id\": \"...\",\n    \"match_status\": \"MISMATCH\",\n    \"mismatch_details\": [...],\n    \"total_amount\": <number>,\n    \"paid_at\": \"...\",\n    \"p2p_cycle_complete\": true\n  },\n  \"routing\": { \"next_node\": null, \"requires_approval\": false }\n}\n\nFor ABORT, build InvoiceFailed:\n{\n  \"event_type\": \"InvoiceFailed\",\n  \"event_id\": \"<session_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": { \"reason\": \"...\", \"inv_id\": \"<if exists>\" },\n  \"routing\": { \"next_node\": null, \"requires_approval\": false }\n}\n\nRespond ONLY with the JSON event object."
+          },
+          {
+            "id": "inv-event-usr-001",
+            "role": "user",
+            "text": "Build the final domain event from:\n\nExecution Results:\n{{system.invoiceExecutionResults}}\n\nValidation Report:\n{{system.invoiceValidationReport}}\n\nInvoice Intent:\n{{system.invoiceIntent}}\n\nSession ID: {{system.sessionId}}\n\nReturn the domain event JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "InvoiceDomainEvent",
+          "description": "InvoicePaid event — final event of P2P cycle",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": { "type": "string" },
+              "event_id": { "type": "string" },
+              "timestamp": { "type": "string" },
+              "payload": { "type": "object" },
+              "routing": { "type": "object", "properties": { "next_node": {}, "requires_approval": { "type": "boolean" } } }
+            },
+            "required": ["event_type", "event_id", "timestamp", "payload", "routing"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-event-out", "fieldName": "system.invoiceDomainEvent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-inv-event-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "invoice_response_builder",
+      "type": "agent",
+      "name": "response_builder",
+      "description": "Builds the final buyer response — the P2P cycle completion summary",
+      "position": { "x": 2167, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "inv-resp-sys-001",
+            "role": "system",
+            "text": "You are the Response Builder for GEP's P2P Invoice Agent. This is the FINAL response of the entire P2P cycle — make it impactful and clear.\n\nFor InvoicePaid (perfect match):\n- Open with a strong confirmation: the full P2P cycle is complete\n- Show the 3-way match result as a markdown table:\n  | Item | PO Qty | GR Qty | Inv Qty | Unit Price | Match |\n  |------|--------|--------|---------|------------|-------|\n  | HP EliteBook 840 G10 | 10 | 10 | 10 | ₹85,000 | ✓ MATCHED |\n- Show invoice number and total amount\n- Show the complete P2P journey summary:\n  ✓ Catalog searched and cart created\n  ✓ Requisition approved (REQ-XXXX)\n  ✓ Purchase Order issued (PO-XXXX)\n  ✓ Goods received in full\n  ✓ Invoice matched and payment processed (INV-XXXX)\n- End with total time saved vs manual process\n\nFor InvoicePaidWithException (mismatch but paid):\n- Confirm payment was processed\n- Clearly show what matched and what did not in a table\n- Show the delta (overpayment or underpayment flagged)\n- Recommend follow-up action\n\nFor InvoiceFailed:\n- Explain what went wrong plainly\n- Suggest corrective action\n- Never say 'error'\n\nFormat in clean markdown. This is the WOW moment of the demo — make it comprehensive but scannable."
+          },
+          {
+            "id": "inv-resp-usr-001",
+            "role": "user",
+            "text": "Build the final buyer response from:\n\nDomain Event: {{system.invoiceDomainEvent}}\nValidation Report: {{system.invoiceValidationReport}}\nExecution Results: {{system.invoiceExecutionResults}}\n\nWrite the complete P2P cycle completion response."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": { "enable": false, "name": "", "description": "", "schema": { "type": "object", "properties": {}, "required": [], "additionalProperties": false } },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-inv-resp-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 269, "height": 102
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "name": "output",
+      "description": "Final output of the Invoice orchestration — end of P2P cycle",
+      "position": { "x": 2499, "y": 101 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "enableImageRendering": false,
+        "outputMapping": {
+          "messages": { "type": "string", "value": "{{thread.messages}}" },
+          "files": { "type": "array", "value": "{{system.files}}" },
+          "domain_event": { "type": "object", "value": "{{system.invoiceDomainEvent}}" },
+          "inv_id": { "type": "string", "value": "{{system.invId}}" },
+          "validation_report": { "type": "object", "value": "{{system.invoiceValidationReport}}" },
+          "selectedAgentId": { "type": "string", "value": "{{runtime.workflowMetaData.workflowId}}" },
+          "selectedAgentName": { "type": "string", "value": "{{runtime.workflowMetaData.agentName}}" }
+        },
+        "outcome": { "enabled": false, "variable": "" }
+      },
+      "width": 150, "height": 96
+    }
+  ],
+  "edges": [
+    { "id": "start-inv-intent", "source": "start", "target": "invoice_intent_analyzer", "type": "default", "data": { "sourceType": "start", "targetType": "agent" } },
+    { "id": "edge-inv-intent-planner", "source": "invoice_intent_analyzer", "target": "invoice_planner", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-inv-planner-exec", "source": "invoice_planner", "target": "invoice_tool_executer", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-inv-exec-validator", "source": "invoice_tool_executer", "target": "invoice_validator", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-inv-validator-event", "source": "invoice_validator", "target": "invoice_event_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-inv-event-resp", "source": "invoice_event_builder", "target": "invoice_response_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-inv-resp-output", "source": "invoice_response_builder", "target": "output", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "output" } }
+  ],
+  "variables": {
+    "flow": [],
+    "system": [
+      { "name": "userQuery", "type": "string", "defaultValue": "" },
+      { "name": "sessionId", "type": "string", "defaultValue": "" },
+      { "name": "grConfirmedEvent", "type": "object", "defaultValue": {} },
+      { "name": "invoiceIntent", "type": "object", "defaultValue": {} },
+      { "name": "invoiceExecutionPlan", "type": "object", "defaultValue": {} },
+      { "name": "invoiceExecutionResults", "type": "object", "defaultValue": {} },
+      { "name": "invId", "type": "string", "defaultValue": "" },
+      { "name": "invoiceValidationReport", "type": "object", "defaultValue": {} },
+      { "name": "invoiceDomainEvent", "type": "object", "defaultValue": {} },
+      { "name": "files", "type": "array", "defaultValue": [] }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": { "type": "string", "description": "Trigger message", "required": true },
+      "grConfirmedEvent": { "type": "object", "description": "GRConfirmed event from GR Agent", "required": true }
+    },
+    "outputs": {
+      "messages": { "type": "string", "description": "Full conversation thread" },
+      "domain_event": { "type": "object", "description": "InvoicePaid event — end of P2P cycle" },
+      "inv_id": { "type": "string", "description": "Created invoice ID" },
+      "validation_report": { "type": "object", "description": "Validation including 3-way match details" }
+    }
+  },
+  "skills": [],
+  "publishChannels": [
+    { "refId": "api", "code": "api", "name": "API", "description": "Expose Invoice Agent as REST API" },
+    { "refId": "qi-ui", "code": "qi-ui", "name": "Qi UI", "description": "Make Invoice Agent available in GEP Qi interface" }
+  ],
+  "security": { "activities": [{ "refId": "755000001", "code": "755000001", "name": "Home" }] }
+}

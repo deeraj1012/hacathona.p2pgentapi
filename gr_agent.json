@@ -1,0 +1,411 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "description": "Starting point of the GR orchestration",
+      "position": { "x": 150, "y": 102 },
+      "deletable": false,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": { "label": "start", "nodeType": "start", "triggerWizard": { "triggerType": "api" } },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-start-001", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.interface.inputs.message}}", "role": "user" },
+        { "variableUpdateId": "vu-gr-start-002", "fieldName": "system.files", "operation": "clear" },
+        { "variableUpdateId": "vu-gr-start-003", "fieldName": "system.userQuery", "operation": "set", "value": "{{nodeOutput.interface.inputs.message}}" },
+        { "variableUpdateId": "vu-gr-start-004", "fieldName": "system.poIssuedEvent", "operation": "set", "value": "{{nodeOutput.interface.inputs.poIssuedEvent}}" },
+        { "variableUpdateId": "vu-gr-start-005", "fieldName": "system.sessionId", "operation": "set", "value": "{{nodeOutput.options.sessionId}}" }
+      ],
+      "width": 250, "height": 96
+    },
+    {
+      "id": "gr_intent_analyzer",
+      "type": "agent",
+      "name": "intent_analyzer",
+      "description": "Reads the POIssued event and extracts everything needed to create a Goods Receipt",
+      "position": { "x": 500, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "gr-intent-sys-001",
+            "role": "system",
+            "text": "You are the Intent Analyzer for GEP's P2P Goods Receipt Agent. You receive a POIssued event and extract everything needed to create and record a Goods Receipt.\n\nFrom the POIssued event, extract:\n- po_id: the Purchase Order ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- supplier_id: the supplier ID\n- lines: array of ordered lines (po_line_id if present, item_id, item_name, sku, qty_ordered, unit_price, line_total)\n  - IMPORTANT: for each line, set qty_received = qty_ordered by default (assume full delivery for demo)\n- grand_total: total order value\n- deliver_to: expected delivery address\n- need_by: expected delivery date\n\nAlso set:\n- receipt_scenario: \"FULL\" if all qty_received equals qty_ordered, else \"PARTIAL\"\n- In demo mode, always set receipt_scenario to \"FULL\" unless the message explicitly mentions short delivery\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"po_id\": \"po-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"supplier_id\": \"SUP-001\",\n  \"lines\": [{ \"po_line_id\": \"line-uuid\", \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"qty_ordered\": 10, \"qty_received\": 10, \"unit_price\": 85000, \"line_total\": 850000 }],\n  \"grand_total\": 850000,\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"receipt_scenario\": \"FULL\"\n}"
+          },
+          {
+            "id": "gr-intent-usr-001",
+            "role": "user",
+            "text": "POIssued event received:\n{{system.poIssuedEvent}}\n\nOriginal message: {{system.userQuery}}\n\nExtract all GR fields and return the JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "GRIntent",
+          "description": "Structured GR data extracted from POIssued event",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "po_id": { "type": "string" },
+              "buyer_id": { "type": "string" },
+              "session_id": { "type": "string" },
+              "supplier_id": { "type": "string" },
+              "lines": { "type": "array" },
+              "grand_total": { "type": "number" },
+              "deliver_to": { "type": "string" },
+              "need_by": { "type": "string" },
+              "receipt_scenario": { "type": "string", "enum": ["FULL", "PARTIAL"] }
+            },
+            "required": ["po_id", "lines", "grand_total", "receipt_scenario"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-intent-out", "fieldName": "system.grIntent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-gr-intent-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 259, "height": 102
+    },
+    {
+      "id": "gr_planner",
+      "type": "agent",
+      "name": "planner",
+      "description": "Builds execution plan for GR creation, recording receipt quantities, and confirmation",
+      "position": { "x": 832, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "gr-planner-sys-001",
+            "role": "system",
+            "text": "You are the Planner for GEP's P2P Goods Receipt Agent. Create an execution plan for recording goods receipt.\n\nAvailable GR tools (will be wired via MCP later):\n1. gr_create(po_id) — Create a GR shell from PO, auto-populate lines\n2. gr_record(gr_id, lines[]) — Record qty_received per line { po_line_id, qty_received }\n3. gr_confirm(gr_id) — Confirm receipt, run discrepancy check, emit event\n4. gr_get(gr_id) — Get full GR details\n\nPlanning rules:\n- ALWAYS start with gr_create using po_id\n- ALWAYS call gr_record with all lines and their received quantities\n- ALWAYS call gr_confirm after recording — this triggers the discrepancy check\n- gr_confirm will auto-emit GRConfirmed (full match) or GRException (short ship)\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"gr_create\", \"params\": { \"po_id\": \"po-uuid\" }, \"purpose\": \"Create GR from PO\" },\n    { \"step\": 2, \"tool\": \"gr_record\", \"params\": { \"gr_id\": \"{{step1.gr_id}}\", \"lines\": [{ \"po_line_id\": \"line-uuid\", \"qty_received\": 10 }] }, \"purpose\": \"Record received quantities\" },\n    { \"step\": 3, \"tool\": \"gr_confirm\", \"params\": { \"gr_id\": \"{{step1.gr_id}}\" }, \"purpose\": \"Confirm receipt and run discrepancy check\" }\n  ],\n  \"total_steps\": 3\n}"
+          },
+          {
+            "id": "gr-planner-usr-001",
+            "role": "user",
+            "text": "GR intent:\n{{system.grIntent}}\n\nCreate the execution plan."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "GRExecutionPlan",
+          "description": "Ordered execution plan for GR processing",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "execution_plan": { "type": "array", "items": { "type": "object", "properties": { "step": { "type": "integer" }, "tool": { "type": "string" }, "params": { "type": "object" }, "purpose": { "type": "string" } }, "required": ["step", "tool", "params", "purpose"] } },
+              "total_steps": { "type": "integer" }
+            },
+            "required": ["execution_plan", "total_steps"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-plan-out", "fieldName": "system.grExecutionPlan", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-gr-plan-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "gr_tool_executer",
+      "type": "agent",
+      "name": "tool_executer",
+      "description": "Executes GR API calls — create, record quantities, confirm and check discrepancies",
+      "position": { "x": 1175, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "gr-exec-sys-001",
+            "role": "system",
+            "text": "You are the Tool Executor for GEP's P2P Goods Receipt Agent. Execute the planned GR API calls in order.\n\nTools available (will be wired via MCP later):\n- gr_create: Create a GR shell from a PO\n- gr_record: Record qty_received for each line\n- gr_confirm: Confirm receipt and run discrepancy check\n- gr_get: Get full GR details\n\nExecution rules:\n1. Execute each step IN ORDER\n2. Capture gr_id from step 1 (gr_create) and pass it to subsequent steps\n3. In gr_record, pass ALL lines with their qty_received values\n4. gr_confirm response will contain either:\n   - gr_status: CONFIRMED and discrepancy: null (full match)\n   - gr_status: EXCEPTION and mismatches: [...] (short ship detected)\n5. Capture the full gr_confirm response including any mismatches\n6. Never fabricate tool responses\n\nAfter ALL steps complete, output:\n{\n  \"status\": \"success\" | \"partial\" | \"error\",\n  \"steps_completed\": <number>,\n  \"results\": {\n    \"gr_id\": \"...\",\n    \"po_id\": \"...\",\n    \"gr_status\": \"CONFIRMED\" | \"EXCEPTION\",\n    \"lines_received\": [{ \"po_line_id\": \"...\", \"item_name\": \"...\", \"qty_ordered\": ..., \"qty_received\": ..., \"discrepancy\": null | \"SHORT: -N\" }],\n    \"total_received_value\": <number>,\n    \"mismatches\": [] | [{ \"item_name\": \"...\", \"qty_ordered\": ..., \"qty_received\": ..., \"shortfall\": ... }],\n    \"received_at\": \"...\"\n  },\n  \"error\": null\n}"
+          },
+          {
+            "id": "gr-exec-usr-001",
+            "role": "user",
+            "text": "Execute this GR plan:\n\n{{system.grExecutionPlan}}\n\nContext:\n- Session ID: {{system.sessionId}}\n- GR intent: {{system.grIntent}}\n\nExecute each step and return full results JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 10,
+        "structuredOutput": {
+          "enable": true,
+          "name": "GRExecutionResults",
+          "description": "Results of GR creation, recording, and confirmation",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["success", "partial", "error"] },
+              "steps_completed": { "type": "integer" },
+              "results": { "type": "object", "properties": { "gr_id": { "type": "string" }, "po_id": { "type": "string" }, "gr_status": { "type": "string" }, "lines_received": { "type": "array" }, "total_received_value": { "type": "number" }, "mismatches": { "type": "array" }, "received_at": { "type": "string" } } },
+              "error": {}
+            },
+            "required": ["status", "steps_completed", "results"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": true,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-exec-out", "fieldName": "system.grExecutionResults", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-gr-id", "fieldName": "system.grId", "operation": "set", "value": "{{nodeOutput.structuredOutput.results.gr_id}}" },
+        { "variableUpdateId": "vu-gr-exec-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 350, "height": 199
+    },
+    {
+      "id": "gr_validator",
+      "type": "agent",
+      "name": "validator",
+      "description": "Validates GR was created and checks for discrepancies between ordered and received quantities",
+      "position": { "x": 1503, "y": 102 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "gr-validator-sys-001",
+            "role": "system",
+            "text": "You are the Validator for GEP's P2P Goods Receipt Agent. Validate the GR execution results and detect discrepancies.\n\nPerform these checks:\n\n1. GR_CREATED: Does gr_id exist? If null, flag as GR_CREATE_FAILED.\n\n2. PO_LINK: Does po_id in results match po_id from GR intent?\n\n3. QUANTITY_MATCH: For each line, compare qty_received vs qty_ordered.\n   - If ALL lines match exactly: set discrepancy_detected = false\n   - If ANY line has qty_received < qty_ordered: set discrepancy_detected = true, list the mismatches\n\n4. TOTAL_VALUE: Does total_received_value make sense given quantities received?\n   - total_received_value = sum of (qty_received x unit_price) per line\n\n5. GR_STATUS: Is gr_status CONFIRMED or EXCEPTION?\n   - CONFIRMED = full match, proceed to invoice\n   - EXCEPTION = short ship, needs human decision\n\nRespond ONLY with valid JSON:\n{\n  \"validation_passed\": true | false,\n  \"discrepancy_detected\": true | false,\n  \"checks\": [\n    { \"check\": \"GR_CREATED\", \"passed\": true, \"detail\": \"gr_id: gr-uuid\" },\n    { \"check\": \"PO_LINK\", \"passed\": true, \"detail\": \"po_id matches\" },\n    { \"check\": \"QUANTITY_MATCH\", \"passed\": true, \"detail\": \"All 10 units received\" },\n    { \"check\": \"TOTAL_VALUE\", \"passed\": true, \"detail\": \"850000 verified\" },\n    { \"check\": \"GR_STATUS\", \"passed\": true, \"detail\": \"CONFIRMED\" }\n  ],\n  \"mismatches\": [],\n  \"issues\": [],\n  \"recommendation\": \"PROCEED\" | \"NEEDS_CLARIFICATION\" | \"ABORT\",\n  \"clarification_question\": null\n}\n\nIf discrepancy_detected is true, set recommendation to NEEDS_CLARIFICATION and set clarification_question to:\n\"Short shipment detected: <item> — <qty_ordered> ordered, <qty_received> received (<shortfall> units short worth <value>). Would you like to: (A) Raise a partial invoice for received units now, or (B) Wait for full delivery?\""
+          },
+          {
+            "id": "gr-validator-usr-001",
+            "role": "user",
+            "text": "Validate GR results:\n\nExecution Results:\n{{system.grExecutionResults}}\n\nGR Intent:\n{{system.grIntent}}\n\nReturn the validation report JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "GRValidationReport",
+          "description": "Validation results including discrepancy detection",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "validation_passed": { "type": "boolean" },
+              "discrepancy_detected": { "type": "boolean" },
+              "checks": { "type": "array" },
+              "mismatches": { "type": "array" },
+              "issues": { "type": "array" },
+              "recommendation": { "type": "string", "enum": ["PROCEED", "NEEDS_CLARIFICATION", "ABORT"] },
+              "clarification_question": {}
+            },
+            "required": ["validation_passed", "discrepancy_detected", "checks", "mismatches", "issues", "recommendation"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-val-out", "fieldName": "system.grValidationReport", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-gr-val-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "gr_event_builder",
+      "type": "agent",
+      "name": "event_builder",
+      "description": "Builds GRConfirmed or GRException event for the Invoice agent",
+      "position": { "x": 1839, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "gr-event-sys-001",
+            "role": "system",
+            "text": "You are the Event Builder for GEP's P2P Goods Receipt Agent. Build the appropriate domain event for the Invoice Agent.\n\nFor CONFIRMED GR (no discrepancy), build GRConfirmed:\n{\n  \"event_type\": \"GRConfirmed\",\n  \"event_id\": \"<gr_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"gr_id\": \"...\",\n    \"po_id\": \"...\",\n    \"buyer_id\": \"...\",\n    \"session_id\": \"...\",\n    \"lines_received\": [{ \"po_line_id\": \"...\", \"item_id\": \"...\", \"item_name\": \"...\", \"sku\": \"...\", \"qty_ordered\": ..., \"qty_received\": ..., \"unit_price\": ..., \"received_value\": ... }],\n    \"total_received_value\": <number>,\n    \"received_at\": \"...\"\n  },\n  \"routing\": { \"next_node\": \"invoice_agent\", \"requires_approval\": false }\n}\n\nFor EXCEPTION GR (short ship), build GRException:\n{\n  \"event_type\": \"GRException\",\n  \"event_id\": \"<gr_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": {\n    \"gr_id\": \"...\",\n    \"po_id\": \"...\",\n    \"mismatches\": [{ \"item_name\": \"...\", \"qty_ordered\": ..., \"qty_received\": ..., \"shortfall\": ..., \"shortfall_value\": ... }],\n    \"total_received_value\": <number>,\n    \"clarification_question\": \"<from validation report>\"\n  },\n  \"routing\": { \"next_node\": null, \"requires_approval\": true }\n}\n\nFor ABORT, build GRFailed:\n{\n  \"event_type\": \"GRFailed\",\n  \"event_id\": \"<session_id>-<timestamp>\",\n  \"timestamp\": \"<ISO 8601>\",\n  \"payload\": { \"reason\": \"...\", \"gr_id\": \"<if exists>\" },\n  \"routing\": { \"next_node\": null, \"requires_approval\": false }\n}\n\nRespond ONLY with the JSON event object."
+          },
+          {
+            "id": "gr-event-usr-001",
+            "role": "user",
+            "text": "Build the domain event from:\n\nExecution Results:\n{{system.grExecutionResults}}\n\nValidation Report:\n{{system.grValidationReport}}\n\nGR Intent:\n{{system.grIntent}}\n\nSession ID: {{system.sessionId}}\n\nReturn the domain event JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": {
+          "enable": true,
+          "name": "GRDomainEvent",
+          "description": "GRConfirmed or GRException event for Invoice Agent",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "event_type": { "type": "string" },
+              "event_id": { "type": "string" },
+              "timestamp": { "type": "string" },
+              "payload": { "type": "object" },
+              "routing": { "type": "object", "properties": { "next_node": {}, "requires_approval": { "type": "boolean" } } }
+            },
+            "required": ["event_type", "event_id", "timestamp", "payload", "routing"],
+            "additionalProperties": false
+          }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-event-out", "fieldName": "system.grDomainEvent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
+        { "variableUpdateId": "vu-gr-event-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 250, "height": 102
+    },
+    {
+      "id": "gr_response_builder",
+      "type": "agent",
+      "name": "response_builder",
+      "description": "Builds buyer-friendly response — confirms receipt or surfaces discrepancy with options",
+      "position": { "x": 2167, "y": 98 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "agentStrategy": "react",
+        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "promptTemplate": [
+          {
+            "id": "gr-resp-sys-001",
+            "role": "system",
+            "text": "You are the Response Builder for GEP's P2P Goods Receipt Agent. Write a clear buyer-friendly response.\n\nFor GRConfirmed:\n- Confirm all items received in full\n- Show a markdown table: Item | Qty Ordered | Qty Received | Status\n- Show total received value\n- Tell buyer what happens next: invoice will now be created and matched\n- Include gr_id for reference\n\nFor GRException (short ship):\n- This is the KEY demo moment — be clear and precise\n- State exactly what was received vs ordered per item\n- Show the shortfall in units and value\n- Ask the clarification question from the validation report exactly as written\n- Make the two options (A and B) very clear\n- Do NOT proceed — wait for buyer response\n\nFor GRFailed:\n- Explain what went wrong plainly\n- Suggest corrective action\n- Never say 'error'\n\nFormat in clean markdown."
+          },
+          {
+            "id": "gr-resp-usr-001",
+            "role": "user",
+            "text": "Build the buyer response from:\n\nDomain Event: {{system.grDomainEvent}}\nValidation Report: {{system.grValidationReport}}\nExecution Results: {{system.grExecutionResults}}\n\nWrite the response."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "structuredOutput": { "enable": false, "name": "", "description": "", "schema": { "type": "object", "properties": {}, "required": [], "additionalProperties": false } },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
+      },
+      "variableUpdates": [
+        { "variableUpdateId": "vu-gr-resp-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+      ],
+      "width": 269, "height": 102
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "name": "output",
+      "description": "Final output of the GR orchestration",
+      "position": { "x": 2499, "y": 101 },
+      "deletable": true,
+      "data": {},
+      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "config": {
+        "enableImageRendering": false,
+        "outputMapping": {
+          "messages": { "type": "string", "value": "{{thread.messages}}" },
+          "files": { "type": "array", "value": "{{system.files}}" },
+          "domain_event": { "type": "object", "value": "{{system.grDomainEvent}}" },
+          "gr_id": { "type": "string", "value": "{{system.grId}}" },
+          "validation_report": { "type": "object", "value": "{{system.grValidationReport}}" },
+          "selectedAgentId": { "type": "string", "value": "{{runtime.workflowMetaData.workflowId}}" },
+          "selectedAgentName": { "type": "string", "value": "{{runtime.workflowMetaData.agentName}}" }
+        },
+        "outcome": { "enabled": false, "variable": "" }
+      },
+      "width": 150, "height": 96
+    }
+  ],
+  "edges": [
+    { "id": "start-gr-intent", "source": "start", "target": "gr_intent_analyzer", "type": "default", "data": { "sourceType": "start", "targetType": "agent" } },
+    { "id": "edge-gr-intent-planner", "source": "gr_intent_analyzer", "target": "gr_planner", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-gr-planner-exec", "source": "gr_planner", "target": "gr_tool_executer", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-gr-exec-validator", "source": "gr_tool_executer", "target": "gr_validator", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-gr-validator-event", "source": "gr_validator", "target": "gr_event_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-gr-event-resp", "source": "gr_event_builder", "target": "gr_response_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
+    { "id": "edge-gr-resp-output", "source": "gr_response_builder", "target": "output", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "output" } }
+  ],
+  "variables": {
+    "flow": [],
+    "system": [
+      { "name": "userQuery", "type": "string", "defaultValue": "" },
+      { "name": "sessionId", "type": "string", "defaultValue": "" },
+      { "name": "poIssuedEvent", "type": "object", "defaultValue": {} },
+      { "name": "grIntent", "type": "object", "defaultValue": {} },
+      { "name": "grExecutionPlan", "type": "object", "defaultValue": {} },
+      { "name": "grExecutionResults", "type": "object", "defaultValue": {} },
+      { "name": "grId", "type": "string", "defaultValue": "" },
+      { "name": "grValidationReport", "type": "object", "defaultValue": {} },
+      { "name": "grDomainEvent", "type": "object", "defaultValue": {} },
+      { "name": "files", "type": "array", "defaultValue": [] }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": { "type": "string", "description": "Trigger message or buyer response to discrepancy", "required": true },
+      "poIssuedEvent": { "type": "object", "description": "POIssued event from Order Agent", "required": true }
+    },
+    "outputs": {
+      "messages": { "type": "string", "description": "Full conversation thread" },
+      "domain_event": { "type": "object", "description": "GRConfirmed or GRException event for Invoice Agent" },
+      "gr_id": { "type": "string", "description": "Created GR ID" },
+      "validation_report": { "type": "object", "description": "Validation including discrepancy details" }
+    }
+  },
+  "skills": [],
+  "publishChannels": [
+    { "refId": "api", "code": "api", "name": "API", "description": "Expose GR Agent as REST API" },
+    { "refId": "qi-ui", "code": "qi-ui", "name": "Qi UI", "description": "Make GR Agent available in GEP Qi interface" }
+  ],
+  "security": { "activities": [{ "refId": "755000001", "code": "755000001", "name": "Home" }] }
+}

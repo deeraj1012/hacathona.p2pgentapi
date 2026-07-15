@@ -1,0 +1,776 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": "start",
+      "description": "Starting point of the orchestration",
+      "position": {
+        "x": 154.08373779901797,
+        "y": 102
+      },
+      "deletable": false,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "label": "start",
+        "nodeType": "start",
+        "triggerWizard": {
+          "triggerType": "api"
+        }
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-001n0eid",
+          "fieldName": "flow.agentName",
+          "operation": "set",
+          "value": ""
+        },
+        {
+          "variableUpdateId": "vu-01ibb6pl",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.interface.inputs.message}}",
+          "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-00kik775",
+          "fieldName": "system.files",
+          "operation": "clear"
+        },
+        {
+          "variableUpdateId": "vu-00c8tvo6",
+          "fieldName": "system.userQuery",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.message}}"
+        },
+        {
+          "variableUpdateId": "vu-001inaky",
+          "fieldName": "system.attachments",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.attachments}}"
+        },
+        {
+          "variableUpdateId": "vu-01oyki1a",
+          "fieldName": "system.sessionId",
+          "operation": "set",
+          "value": "{{nodeOutput.options.sessionId}}"
+        }
+      ],
+      "width": 250,
+      "height": 96,
+      "positionAbsolute": {
+        "x": 154.08373779901797,
+        "y": 102
+      }
+    },
+    {
+      "id": "agent_0",
+      "type": "agent",
+      "name": "p2p_router",
+      "description": "Reads the buyer message and determines which P2P domain agent to invoke",
+      "position": {
+        "x": 482.722491866012,
+        "y": -91.00000000000003
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "agentStrategy": "react",
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
+        "promptTemplate": [
+          {
+            "id": "router-sys-001",
+            "role": "system",
+            "text": "You are the P2P Router for GEP's Procure-to-Pay AI Agent. Your ONLY job is to read the buyer's message and decide which domain agent should handle it.\n\nThe five domain agents and their exact string values:\n\n| Agent | Value to return | Handles |\n|---|---|---|\n| Catalog Agent | catalogagent | Searching for items, browsing catalog, adding to cart, viewing items, checking prices, creating or flipping a cart |\n| Requisition Agent | requisitionagent | Creating a requisition, setting accounting codes (cost centre, GL account), setting delivery address, submitting for approval, checking req status |\n| Order Agent | orderagent | Creating a Purchase Order, issuing PO to supplier, checking order status |\n| Goods Receipt Agent | goodsreceiptagent | Recording delivery of goods, confirming receipt, reporting short shipment, recording received quantities |\n| Invoice Agent | invoiceagent | Creating an invoice, 3-way match, approving invoice, processing payment, checking invoice status |\n\nRouting rules:\n- If the message is a NEW purchase request (e.g. \"I need 10 laptops\", \"buy me office chairs\", \"order 5 monitors\") → catalogagent\n- If the message mentions requisition, req, approval, cost centre, GL account, accounting → requisitionagent\n- If the message mentions purchase order, PO, supplier, order → orderagent\n- If the message mentions delivery, received, goods receipt, GR, shipment, arrived → goodsreceiptagent\n- If the message mentions invoice, payment, 3-way match, billing, pay → invoiceagent\n- When in doubt for a new purchase request → always default to catalogagent\n\nYou MUST respond with ONLY a JSON object — nothing else, no explanation, no preamble:\n{\n  \"agentName\": \"<one of: catalogagent | requisitionagent | orderagent | goodsreceiptagent | invoiceagent>\",\n  \"reason\": \"<one sentence explaining why>\",\n  \"confidence\": \"high\" | \"medium\" | \"low\"\n}\n\nExamples:\nMessage: \"I need 10 HP laptops for Hyderabad office\" → { \"agentName\": \"catalogagent\", \"reason\": \"New purchase request — catalog search and cart creation needed\", \"confidence\": \"high\" }\nMessage: \"What is the status of my requisition REQ-001?\" → { \"agentName\": \"requisitionagent\", \"reason\": \"Asking about requisition status\", \"confidence\": \"high\" }\nMessage: \"The laptops have arrived, all 10 received\" → { \"agentName\": \"goodsreceiptagent\", \"reason\": \"Confirming delivery of goods\", \"confidence\": \"high\" }\nMessage: \"Process the invoice for PO-001\" → { \"agentName\": \"invoiceagent\", \"reason\": \"Invoice creation and processing requested\", \"confidence\": \"high\" }"
+          },
+          {
+            "id": "router-usr-001",
+            "role": "user",
+            "text": "Buyer message: {{system.userQuery}}\n\nDetermine the correct agent and return the JSON."
+          }
+        ],
+        "tools": [],
+        "resources": [],
+        "libraries": [],
+        "maxIterations": 1,
+        "includeThoughts": false,
+        "structuredOutput": {
+          "enable": true,
+          "name": "RouterDecision",
+          "description": "Which P2P agent to route this message to",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "agentName": {
+                "type": "string",
+                "enum": [
+                  "catalogagent",
+                  "requisitionagent",
+                  "orderagent",
+                  "goodsreceiptagent",
+                  "invoiceagent"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              }
+            },
+            "required": ["agentName", "reason", "confidence"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-007td8pl",
+          "fieldName": "flow.agentName",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput.agentName}}"
+        },
+        {
+          "variableUpdateId": "vu-01e5bvqu",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
+      ],
+      "width": 250,
+      "height": 102,
+      "positionAbsolute": {
+        "x": 482.722491866012,
+        "y": -91.00000000000003
+      }
+    },
+    {
+      "id": "output",
+      "type": "output",
+      "name": "output",
+      "description": "Final output of the orchestration",
+      "position": {
+        "x": 1539.0162370464013,
+        "y": 68.4712784689581
+      },
+      "deletable": true,
+      "selected": false,
+      "dragging": false,
+      "data": {},
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "enableImageRendering": false,
+        "outputMapping": {
+          "messages": {
+            "type": "string",
+            "value": "{{thread.messages}}"
+          },
+          "files": {
+            "type": "array",
+            "value": "{{system.files}}"
+          },
+          "routed_to": {
+            "type": "string",
+            "value": "{{flow.agentName}}"
+          },
+          "selectedAgentId": {
+            "type": "string",
+            "value": "{{runtime.workflowMetaData.workflowId}}"
+          },
+          "selectedAgentName": {
+            "type": "string",
+            "value": "{{runtime.workflowMetaData.agentName}}"
+          }
+        },
+        "outcome": {
+          "enabled": false,
+          "variable": ""
+        }
+      },
+      "width": 150,
+      "height": 96,
+      "positionAbsolute": {
+        "x": 1539.0162370464013,
+        "y": 72.41868899508975
+      }
+    },
+    {
+      "id": "dzm9wgp",
+      "type": "rule",
+      "name": "rule_0",
+      "description": "",
+      "position": {
+        "x": 726.4285714285712,
+        "y": 83.14696021872027
+      },
+      "deletable": true,
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "rules": [
+          {
+            "ruleId": "r-015ddvv0",
+            "enable": true,
+            "conditions": [
+              {
+                "conditionId": "c-01illawh",
+                "field": "{{flow.agentName}}",
+                "operator": "equals",
+                "value": "catalogagent"
+              }
+            ],
+            "logicType": "AND"
+          },
+          {
+            "ruleId": "r-017v4l5v",
+            "enable": true,
+            "conditions": [
+              {
+                "conditionId": "c-00riif0l",
+                "field": "{{flow.agentName}}",
+                "operator": "equals",
+                "value": "requisitionagent"
+              }
+            ],
+            "logicType": "AND"
+          },
+          {
+            "ruleId": "r-018vadyb",
+            "enable": true,
+            "conditions": [
+              {
+                "conditionId": "c-015ugsh7",
+                "field": "{{flow.agentName}}",
+                "operator": "equals",
+                "value": "orderagent"
+              }
+            ],
+            "logicType": "AND"
+          },
+          {
+            "ruleId": "r-00y04uak",
+            "enable": true,
+            "conditions": [
+              {
+                "conditionId": "c-018rv7jp",
+                "field": "{{flow.agentName}}",
+                "operator": "equals",
+                "value": "goodsreceiptagent"
+              }
+            ],
+            "logicType": "AND"
+          },
+          {
+            "ruleId": "r-00nmnjqn",
+            "enable": true,
+            "conditions": [
+              {
+                "conditionId": "c-00pnx0aq",
+                "field": "{{flow.agentName}}",
+                "operator": "equals",
+                "value": "invoiceagent"
+              }
+            ],
+            "logicType": "AND"
+          },
+          {
+            "ruleId": "r-else",
+            "enable": true,
+            "conditions": [],
+            "logicType": "default"
+          }
+        ]
+      },
+      "data": {},
+      "width": 269,
+      "height": 305,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 726.4285714285712,
+        "y": 83.14696021872027
+      },
+      "dragging": false
+    },
+    {
+      "id": "5l63mn6",
+      "type": "workflow",
+      "name": "catalogagent",
+      "description": "",
+      "position": {
+        "x": 1134.7142857142858,
+        "y": -122.42857142857144
+      },
+      "deletable": true,
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "appInfo": {
+          "id": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+          "name": "P2PHacathonAgent"
+        },
+        "moduleInfo": {
+          "id": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+          "name": "P2PHacathonAgent BaseModule"
+        },
+        "inputs": {
+          "message": "{{system.userQuery}}"
+        },
+        "agenticWorkflowIdMode": "static",
+        "agenticWorkflowId": "6bb4f720-5634-4b79-b3dd-db89e211463a",
+        "agentInfo": {
+          "id": "6bb4f720-5634-4b79-b3dd-db89e211463a",
+          "name": "catalogagent",
+          "description": "An Agent which will ease the P2P buying process"
+        }
+      },
+      "data": {},
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-catalog-msg",
+          "fieldName": "thread.messages",
+          "operation": "extend",
+          "value": "{{nodeOutput.messages}}",
+          "role": "user"
+        }
+      ],
+      "width": 250,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1133.2857142857142,
+        "y": -122.42857142857144
+      },
+      "dragging": false
+    },
+    {
+      "id": "i8zz5eh",
+      "type": "workflow",
+      "name": "requistionagent",
+      "description": "",
+      "position": {
+        "x": 1146.9654991113396,
+        "y": 2.679784825625294
+      },
+      "deletable": true,
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "appInfo": {
+          "id": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+          "name": "P2PHacathonAgent"
+        },
+        "moduleInfo": {
+          "id": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+          "name": "P2PHacathonAgent BaseModule"
+        },
+        "inputs": {
+          "message": "{{system.userQuery}}"
+        },
+        "agenticWorkflowIdMode": "static",
+        "agenticWorkflowId": "4fab7c28-500a-48f5-84d7-7f25be358e5a",
+        "agentInfo": {
+          "id": "4fab7c28-500a-48f5-84d7-7f25be358e5a",
+          "name": "requistionagent",
+          "description": "RequistionAgent"
+        }
+      },
+      "data": {},
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-req-msg",
+          "fieldName": "thread.messages",
+          "operation": "extend",
+          "value": "{{nodeOutput.messages}}",
+          "role": "user"
+        }
+      ],
+      "width": 268,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1146.9654991113396,
+        "y": 2.679784825625294
+      },
+      "dragging": false
+    },
+    {
+      "id": "hhtfzbx",
+      "type": "workflow",
+      "name": "orderagent",
+      "description": "",
+      "position": {
+        "x": 1172.8291718384532,
+        "y": 92.4712784689581
+      },
+      "deletable": true,
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "appInfo": {
+          "id": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+          "name": "P2PHacathonAgent"
+        },
+        "moduleInfo": {
+          "id": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+          "name": "P2PHacathonAgent BaseModule"
+        },
+        "inputs": {
+          "message": "{{system.userQuery}}"
+        },
+        "agenticWorkflowIdMode": "static",
+        "agenticWorkflowId": "d03fe865-3eff-4c1b-a0de-6de7e1910e9f",
+        "agentInfo": {
+          "id": "d03fe865-3eff-4c1b-a0de-6de7e1910e9f",
+          "name": "orderagent",
+          "description": "OrderAgent"
+        }
+      },
+      "data": {},
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-order-msg",
+          "fieldName": "thread.messages",
+          "operation": "extend",
+          "value": "{{nodeOutput.messages}}",
+          "role": "user"
+        }
+      ],
+      "width": 250,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1172.8291718384532,
+        "y": 92.4712784689581
+      },
+      "dragging": false
+    },
+    {
+      "id": "1be8ngd",
+      "type": "workflow",
+      "name": "goodsreceipt",
+      "description": "",
+      "position": {
+        "x": 1134.7142857142858,
+        "y": 206.14285714285717
+      },
+      "deletable": true,
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "appInfo": {
+          "id": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+          "name": "P2PHacathonAgent"
+        },
+        "moduleInfo": {
+          "id": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+          "name": "P2PHacathonAgent BaseModule"
+        },
+        "inputs": {
+          "message": "{{system.userQuery}}"
+        },
+        "agenticWorkflowIdMode": "static",
+        "agenticWorkflowId": "3f294ead-9bf2-4a8a-9a25-b78a1960331e",
+        "agentInfo": {
+          "id": "3f294ead-9bf2-4a8a-9a25-b78a1960331e",
+          "name": "goodsreceiptagent",
+          "description": "GoodsReceiptAgent"
+        }
+      },
+      "data": {},
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-gr-msg",
+          "fieldName": "thread.messages",
+          "operation": "extend",
+          "value": "{{nodeOutput.messages}}",
+          "role": "user"
+        }
+      ],
+      "width": 250,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1136.142857142857,
+        "y": 206.14285714285717
+      },
+      "dragging": false
+    },
+    {
+      "id": "bcudwfx",
+      "type": "workflow",
+      "name": "invoiceagent",
+      "description": "",
+      "position": {
+        "x": 1134.7142857142858,
+        "y": 331.85714285714283
+      },
+      "deletable": true,
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 6,
+        "retryInterval": 541,
+        "errorHandling": "none"
+      },
+      "config": {
+        "appInfo": {
+          "id": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+          "name": "P2PHacathonAgent"
+        },
+        "moduleInfo": {
+          "id": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+          "name": "P2PHacathonAgent BaseModule"
+        },
+        "inputs": {
+          "message": "{{system.userQuery}}"
+        },
+        "agenticWorkflowIdMode": "static",
+        "agenticWorkflowId": "9217be18-9df4-4d85-8611-2925177ae679",
+        "agentInfo": {
+          "id": "9217be18-9df4-4d85-8611-2925177ae679",
+          "name": "invoiceagent",
+          "description": "InvoiceAgenet"
+        }
+      },
+      "data": {},
+      "variableUpdates": [
+        {
+          "variableUpdateId": "vu-inv-msg",
+          "fieldName": "thread.messages",
+          "operation": "extend",
+          "value": "{{nodeOutput.messages}}",
+          "role": "user"
+        }
+      ],
+      "width": 250,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1136.5714285714287,
+        "y": 331.85714285714283
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-agent_0",
+      "source": "start",
+      "target": "agent_0",
+      "type": "default",
+      "data": {
+        "sourceType": "start",
+        "targetType": "agent"
+      }
+    },
+    {
+      "id": "reactflow__edge-agent_0-dzm9wgp",
+      "source": "agent_0",
+      "target": "dzm9wgp",
+      "style": { "strokeWidth": 3 },
+      "sourceHandle": null,
+      "targetHandle": null,
+      "data": {
+        "sourceType": "agent",
+        "targetType": "rule"
+      }
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "dzm9wgp",
+      "sourceHandle": "r-015ddvv0",
+      "target": "5l63mn6",
+      "targetHandle": null,
+      "data": { "sourceType": "rule", "targetType": "workflow" },
+      "id": "reactflow__edge-dzm9wgpr-015ddvv0-5l63mn6"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "dzm9wgp",
+      "sourceHandle": "r-017v4l5v",
+      "target": "i8zz5eh",
+      "targetHandle": null,
+      "data": { "sourceType": "rule", "targetType": "workflow" },
+      "id": "reactflow__edge-dzm9wgpr-017v4l5v-i8zz5eh"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "dzm9wgp",
+      "sourceHandle": "r-018vadyb",
+      "target": "hhtfzbx",
+      "targetHandle": null,
+      "data": { "sourceType": "rule", "targetType": "workflow" },
+      "id": "reactflow__edge-dzm9wgpr-018vadyb-hhtfzbx"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "dzm9wgp",
+      "sourceHandle": "r-00y04uak",
+      "target": "1be8ngd",
+      "targetHandle": null,
+      "data": { "sourceType": "rule", "targetType": "workflow" },
+      "id": "reactflow__edge-dzm9wgpr-00y04uak-1be8ngd"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "dzm9wgp",
+      "sourceHandle": "r-00nmnjqn",
+      "target": "bcudwfx",
+      "targetHandle": null,
+      "data": { "sourceType": "rule", "targetType": "workflow" },
+      "id": "reactflow__edge-dzm9wgpr-00nmnjqn-bcudwfx"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "5l63mn6",
+      "sourceHandle": null,
+      "target": "output",
+      "targetHandle": null,
+      "data": { "sourceType": "workflow", "targetType": "output" },
+      "id": "reactflow__edge-5l63mn6-output"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "i8zz5eh",
+      "sourceHandle": null,
+      "target": "output",
+      "targetHandle": null,
+      "data": { "sourceType": "workflow", "targetType": "output" },
+      "id": "reactflow__edge-i8zz5eh-output"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "hhtfzbx",
+      "sourceHandle": null,
+      "target": "output",
+      "targetHandle": null,
+      "data": { "sourceType": "workflow", "targetType": "output" },
+      "id": "reactflow__edge-hhtfzbx-output"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "1be8ngd",
+      "sourceHandle": null,
+      "target": "output",
+      "targetHandle": null,
+      "data": { "sourceType": "workflow", "targetType": "output" },
+      "id": "reactflow__edge-1be8ngd-output"
+    },
+    {
+      "style": { "strokeWidth": 3 },
+      "source": "bcudwfx",
+      "sourceHandle": null,
+      "target": "output",
+      "targetHandle": null,
+      "data": { "sourceType": "workflow", "targetType": "output" },
+      "id": "reactflow__edge-bcudwfx-output"
+    }
+  ],
+  "variables": {
+    "flow": [
+      {
+        "id": "var-16ouc1kch",
+        "name": "agentName",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ],
+    "system": []
+  },
+  "interface": {
+    "inputs": {
+      "message": {
+        "type": "string",
+        "description": "Buyer's natural language purchase or P2P request",
+        "required": true
+      },
+      "attachments": {
+        "type": "array",
+        "description": "Optional file attachments",
+        "required": false
+      }
+    },
+    "outputs": {
+      "messages": {
+        "type": "string",
+        "description": "Full conversation thread from the routed domain agent"
+      },
+      "routed_to": {
+        "type": "string",
+        "description": "Which domain agent was invoked: catalogagent | requisitionagent | orderagent | goodsreceiptagent | invoiceagent"
+      }
+    }
+  },
+  "skills": [],
+  "publishChannels": [
+    {
+      "refId": "api",
+      "code": "api",
+      "name": "API",
+      "description": "Expose the agent as a REST API for system and app integrations"
+    },
+    {
+      "refId": "qi-ui",
+      "code": "qi-ui",
+      "name": "Qi UI",
+      "description": "Make your agent available in GEP's Qi interface"
+    }
+  ],
+  "security": {
+    "activities": [
+      {
+        "refId": "755000001",
+        "code": "755000001",
+        "name": "Home"
+      }
+    ]
+  }
+}
