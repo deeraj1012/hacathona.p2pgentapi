@@ -525,7 +525,34 @@ def invoice_finalize(inv_id: str) -> dict:
     }
 
 
+# ── Health check (for Render / load balancers) ────────────────────────────────
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"status": "ok", "tools": 25, "service": "p2p-hackathon-mcp"})
+
+
 # ── Run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--transport", default="streamable-http", choices=["stdio", "sse", "streamable-http"])
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        mcp.run(transport="stdio")
+    else:
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        # Allow all hosts/origins so ngrok tunnel works
+        from mcp.server.fastmcp.server import TransportSecuritySettings
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+            allowed_hosts=["*"],
+            allowed_origins=["*"],
+        )
+        mcp.run(transport=args.transport)
