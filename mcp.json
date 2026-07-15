@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "p2p-hackathon": {
+      "command": "python3",
+      "args": ["C:/hacathon.p2pagentapi/server.py"],
+      "transport": "stdio"
+    }
+  }
+}
