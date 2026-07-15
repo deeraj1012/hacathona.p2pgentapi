@@ -39,20 +39,35 @@ def _id(prefix: str) -> str:
 @mcp.tool()
 def catalog_search(query: str, category: str = None, max_price: float = None) -> dict:
     """Search the GEP catalog for items matching a keyword query."""
-    q = query.lower()
+    # Strip trailing 's' to handle plurals (monitors->monitor, chairs->chair, laptops->laptop)
+    q = query.lower().strip()
+    q_singular = q.rstrip("s")
     results = []
+
+    def matches(item):
+        name = item["name"].lower()
+        cat = item["category"].lower()
+        if max_price is not None and item["unit_price"] > max_price:
+            return False
+        if category and category.lower().rstrip("s") not in cat:
+            return False
+        return (q in name or q in cat or q_singular in name or q_singular in cat)
+
     for item in CATALOG:
-        if q in item["name"].lower() or (category and category.lower() in item["category"].lower()):
-            if max_price is None or item["unit_price"] <= max_price:
-                results.append(item)
+        if matches(item):
+            results.append(item)
+
+    # fallback: match any word in query
     if not results:
-        # fuzzy: match any word
-        words = q.split()
+        words = [w.rstrip("s") for w in q.split()]
         for item in CATALOG:
-            if any(w in item["name"].lower() or w in item["category"].lower() for w in words):
+            name = item["name"].lower()
+            cat = item["category"].lower()
+            if any(w in name or w in cat for w in words):
                 if max_price is None or item["unit_price"] <= max_price:
                     if item not in results:
                         results.append(item)
+
     return {"results": results, "count": len(results)}
 
 
