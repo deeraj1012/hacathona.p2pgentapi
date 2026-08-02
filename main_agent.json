@@ -501,7 +501,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]\n\n[Conversation history — scan for the most recent CART-/REQ-/PO-/GR-/INV- ID relevant to this stage if the message above doesn't name one explicitly]:\n{{thread.messages}}"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "4fab7c28-500a-48f5-84d7-7f25be358e5a",
@@ -562,7 +562,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]\n\n[Conversation history — scan for the most recent CART-/REQ-/PO-/GR-/INV- ID relevant to this stage if the message above doesn't name one explicitly]:\n{{thread.messages}}"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "d03fe865-3eff-4c1b-a0de-6de7e1910e9f",
@@ -623,7 +623,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]\n\n[Conversation history — scan for the most recent CART-/REQ-/PO-/GR-/INV- ID relevant to this stage if the message above doesn't name one explicitly]:\n{{thread.messages}}"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "3f294ead-9bf2-4a8a-9a25-b78a1960331e",
@@ -684,7 +684,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]\n\n[Conversation history — scan for the most recent CART-/REQ-/PO-/GR-/INV- ID relevant to this stage if the message above doesn't name one explicitly]:\n{{thread.messages}}"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "9217be18-9df4-4d85-8611-2925177ae679",

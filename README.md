@@ -106,15 +106,25 @@ router + rule node.
 only the raw buyer message, never the structured event object (`cartFlipEvent`,
 `reqApprovedEvent`, `poIssuedEvent`, `grConfirmedEvent`) that agent's Intent
 Analyzer expected as a *required* input — so anything past the Catalog stage had
-nothing to extract from. Fixed by:
-- adding a `flow.lastId` variable in `main_agent.json` that captures the ID
-  (`cart_id`/`req_id`/`po_id`/`gr_id`) produced by each stage and threads it into
-  the next stage's message as `[System context: last_created_id=...]`;
-- making the event-object inputs optional on each downstream agent, with the
-  Intent Analyzer falling back to parsing the ID out of the message/context
-  annotation — the actual MCP tools (`req_create`, `order_create`, `gr_create`,
-  `invoice_create`) only ever needed that one ID, since they look up the rest of
-  the record server-side.
+nothing to extract from. Fixed by making the event-object inputs optional on each
+downstream agent, with the Intent Analyzer falling back to parsing the relevant
+ID (`cart_id`/`req_id`/`po_id`/`gr_id`) out of the buyer's message or the
+appended conversation history — the actual MCP tools (`req_create`,
+`order_create`, `gr_create`, `invoice_create`) only ever needed that one ID,
+since they look up the rest of the record server-side.
+
+First attempt threaded the ID via a `flow.lastId` flow-scoped variable, which
+turned out not to survive across separate user turns in the same QiStudio
+session (flow variables there appear to be execution-scoped, not
+session-scoped — confirmed by a live test where requisition creation still
+came back asking for `cart_id` after cart creation succeeded in the same
+conversation). Replaced with `{{thread.messages}}` — the conversation
+transcript, which *is* built by `append`/`extend` on every node across every
+turn and is therefore guaranteed to persist — passed into each downstream
+agent's message input, with the Intent Analyzer instructed to scan it for the
+most recent matching ID. `flow.lastId` is left wired as a redundant hint in
+case it does persist in some invocation paths, but `thread.messages` is now the
+primary mechanism.
 
 Also fixed `gr_confirm` dropping `unit_price` from its output, which silently
 priced every invoice line at 0 and made `invoice_match` always report MISMATCH.
