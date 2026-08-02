@@ -1,41 +1,226 @@
 {
+  "isMigrationFlagLocked": false,
+  "agenticWorkflowId": "d03fe865-3eff-4c1b-a0de-6de7e1910e9f",
+  "name": "orderagent",
+  "displayName": "OrderAgent",
+  "description": "OrderAgent",
+  "isDisabled": false,
+  "isAvailableForMigration": false,
+  "editAs": "canvas",
+  "enableForAutoInvoke": false,
+  "includeThoughts": false,
+  "invocationType": "API",
+  "publishChannels": [
+    {
+      "refId": "api",
+      "code": "api",
+      "name": "API",
+      "description": "Expose Order Agent as REST API"
+    },
+    {
+      "refId": "qi-ui",
+      "code": "qi-ui",
+      "name": "Qi UI",
+      "description": "Make Order Agent available in GEP Qi interface"
+    }
+  ],
+  "security": {
+    "activities": [
+      {
+        "refId": "755000001",
+        "code": "755000001",
+        "name": "Home"
+      }
+    ]
+  },
+  "skills": [],
+  "variables": {
+    "flow": [],
+    "system": [
+      {
+        "refId": "userQuery",
+        "name": "userQuery",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "refId": "sessionId",
+        "name": "sessionId",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "refId": "reqApprovedEvent",
+        "name": "reqApprovedEvent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "orderIntent",
+        "name": "orderIntent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "orderExecutionPlan",
+        "name": "orderExecutionPlan",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "orderExecutionResults",
+        "name": "orderExecutionResults",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "poId",
+        "name": "poId",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "refId": "orderValidationReport",
+        "name": "orderValidationReport",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "orderDomainEvent",
+        "name": "orderDomainEvent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "files",
+        "name": "files",
+        "type": "array",
+        "defaultValue": []
+      }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": {
+        "type": "string",
+        "description": "Trigger message",
+        "required": true
+      },
+      "reqApprovedEvent": {
+        "type": "object",
+        "description": "ReqApproved event from Req Agent. May be omitted/empty when this agent is invoked directly by the P2P router — in that case the intent analyzer falls back to the req_id found in the message text or the last_created_id context annotation.",
+        "required": false
+      }
+    },
+    "outputs": {
+      "messages": {
+        "type": "string",
+        "description": "Full conversation thread"
+      },
+      "domain_event": {
+        "type": "object",
+        "description": "POIssued event for GR Agent"
+      },
+      "po_id": {
+        "type": "string",
+        "description": "Created PO ID"
+      },
+      "validation_report": {
+        "type": "object",
+        "description": "Validation checks and results"
+      }
+    }
+  },
   "nodes": [
     {
       "id": "start",
       "type": "start",
       "name": "start",
       "description": "Starting point of the Order orchestration",
-      "position": { "x": 150, "y": 102 },
+      "position": {
+        "x": 150,
+        "y": 102
+      },
       "deletable": false,
       "data": {},
-      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
-      "config": { "label": "start", "nodeType": "start", "triggerWizard": { "triggerType": "api" } },
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
+      "config": {
+        "label": "start",
+        "nodeType": "start",
+        "triggerWizard": {
+          "triggerType": "api"
+        }
+      },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-start-001", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.interface.inputs.message}}", "role": "user" },
-        { "variableUpdateId": "vu-ord-start-002", "fieldName": "system.files", "operation": "clear" },
-        { "variableUpdateId": "vu-ord-start-003", "fieldName": "system.userQuery", "operation": "set", "value": "{{nodeOutput.interface.inputs.message}}" },
-        { "variableUpdateId": "vu-ord-start-004", "fieldName": "system.reqApprovedEvent", "operation": "set", "value": "{{nodeOutput.interface.inputs.reqApprovedEvent}}" },
-        { "variableUpdateId": "vu-ord-start-005", "fieldName": "system.sessionId", "operation": "set", "value": "{{nodeOutput.options.sessionId}}" }
+        {
+          "variableUpdateId": "vu-ord-start-001",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.interface.inputs.message}}",
+          "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-ord-start-002",
+          "fieldName": "system.files",
+          "operation": "clear"
+        },
+        {
+          "variableUpdateId": "vu-ord-start-003",
+          "fieldName": "system.userQuery",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.message}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-start-004",
+          "fieldName": "system.reqApprovedEvent",
+          "operation": "set",
+          "value": "{{nodeOutput.interface.inputs.reqApprovedEvent}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-start-005",
+          "fieldName": "system.sessionId",
+          "operation": "set",
+          "value": "{{nodeOutput.options.sessionId}}"
+        }
       ],
-      "width": 250, "height": 96
+      "width": 250,
+      "height": 96
     },
     {
       "id": "order_intent_analyzer",
       "type": "agent",
       "name": "intent_analyzer",
       "description": "Reads the ReqApproved event and extracts everything needed to create a Purchase Order",
-      "position": { "x": 500, "y": 98 },
+      "position": {
+        "x": 431.42857142857133,
+        "y": -69.14285714285717
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "agentStrategy": "react",
-        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
         "promptTemplate": [
           {
             "id": "ord-intent-sys-001",
             "role": "system",
-            "text": "You are the Intent Analyzer for GEP's P2P Order Agent. You receive a ReqApproved event and extract everything needed to create a Purchase Order.\n\nFrom the ReqApproved event, extract:\n- req_id: the approved requisition ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- lines: array of line items (item_id, item_name, sku, quantity, unit_price, line_total, supplier_id)\n- grand_total: total PO value\n- supplier_id: supplier to send PO to (take from first line — all lines go to same supplier in this demo)\n- deliver_to: delivery address\n- need_by: required delivery date\n- cost_center: cost centre for reference\n- gl_account: GL account for reference\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"req_id\": \"req-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"supplier_id\": \"SUP-001\",\n  \"lines\": [{ \"item_id\": \"...\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"quantity\": 10, \"unit_price\": 85000, \"line_total\": 850000, \"supplier_id\": \"SUP-001\" }],\n  \"grand_total\": 850000,\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\"\n}"
+            "text": "You are the Intent Analyzer for GEP's P2P Order Agent. You receive a ReqApproved event and extract everything needed to create a Purchase Order.\n\nFALLBACK — the ReqApproved event may be empty ({}) if this agent was invoked directly by the router rather than chained automatically. In that case:\n1. Look for a requisition ID (pattern REQ-XXXXXXXX) in the buyer's message, or in a '[System context: last_created_id=...]' annotation appended to the message — that annotation carries the ID produced by whichever agent ran just before this one in the conversation.\n2. Set req_id to that value. You do NOT need full line-item or supplier detail from the event — order_create only needs req_id and looks up the requisition's contents itself.\n3. If no req_id can be found anywhere (event, message text, or context annotation), leave req_id empty rather than fabricating one.\n4. If req_id was found but lines/grand_total/supplier_id are unknown, it's fine to return lines as an empty array — these are informational only, not required by the actual order tools.\n\nFrom the ReqApproved event, extract:\n- req_id: the approved requisition ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- lines: array of line items (item_id, item_name, sku, quantity, unit_price, line_total, supplier_id)\n- grand_total: total PO value\n- supplier_id: supplier to send PO to (take from first line — all lines go to same supplier in this demo)\n- deliver_to: delivery address\n- need_by: required delivery date\n- cost_center: cost centre for reference\n- gl_account: GL account for reference\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"req_id\": \"req-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"supplier_id\": \"SUP-001\",\n  \"lines\": [{ \"item_id\": \"...\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"quantity\": 10, \"unit_price\": 85000, \"line_total\": 850000, \"supplier_id\": \"SUP-001\" }],\n  \"grand_total\": 850000,\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\"\n}"
           },
           {
             "id": "ord-intent-usr-001",
@@ -54,18 +239,43 @@
           "schema": {
             "type": "object",
             "properties": {
-              "req_id": { "type": "string" },
-              "buyer_id": { "type": "string" },
-              "session_id": { "type": "string" },
-              "supplier_id": { "type": "string" },
-              "lines": { "type": "array" },
-              "grand_total": { "type": "number" },
-              "deliver_to": { "type": "string" },
-              "need_by": { "type": "string" },
-              "cost_center": { "type": "string" },
-              "gl_account": { "type": "string" }
+              "req_id": {
+                "type": "string"
+              },
+              "buyer_id": {
+                "type": "string"
+              },
+              "session_id": {
+                "type": "string"
+              },
+              "supplier_id": {
+                "type": "string"
+              },
+              "lines": {
+                "type": "array"
+              },
+              "grand_total": {
+                "type": "number"
+              },
+              "deliver_to": {
+                "type": "string"
+              },
+              "need_by": {
+                "type": "string"
+              },
+              "cost_center": {
+                "type": "string"
+              },
+              "gl_account": {
+                "type": "string"
+              }
             },
-            "required": ["req_id", "supplier_id", "lines", "grand_total"],
+            "required": [
+              "req_id",
+              "supplier_id",
+              "lines",
+              "grand_total"
+            ],
             "additionalProperties": false
           }
         },
@@ -75,23 +285,54 @@
         "connectors": []
       },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-intent-out", "fieldName": "system.orderIntent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
-        { "variableUpdateId": "vu-ord-intent-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+        {
+          "variableUpdateId": "vu-ord-intent-out",
+          "fieldName": "system.orderIntent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-intent-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
       ],
-      "width": 259, "height": 102
+      "width": 350,
+      "height": 142,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 431.42857142857133,
+        "y": -69.14285714285717
+      },
+      "dragging": false
     },
     {
       "id": "order_planner",
       "type": "agent",
       "name": "planner",
       "description": "Builds execution plan for PO creation, line attachment, supplier dispatch, and finalization",
-      "position": { "x": 832, "y": 98 },
+      "position": {
+        "x": 832,
+        "y": 98
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "agentStrategy": "react",
-        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
         "promptTemplate": [
           {
             "id": "ord-planner-sys-001",
@@ -115,10 +356,40 @@
           "schema": {
             "type": "object",
             "properties": {
-              "execution_plan": { "type": "array", "items": { "type": "object", "properties": { "step": { "type": "integer" }, "tool": { "type": "string" }, "params": { "type": "object" }, "purpose": { "type": "string" } }, "required": ["step", "tool", "params", "purpose"] } },
-              "total_steps": { "type": "integer" }
+              "execution_plan": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "step": {
+                      "type": "integer"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "params": {
+                      "type": "object"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "step",
+                    "tool",
+                    "params",
+                    "purpose"
+                  ]
+                }
+              },
+              "total_steps": {
+                "type": "integer"
+              }
             },
-            "required": ["execution_plan", "total_steps"],
+            "required": [
+              "execution_plan",
+              "total_steps"
+            ],
             "additionalProperties": false
           }
         },
@@ -128,23 +399,48 @@
         "connectors": []
       },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-plan-out", "fieldName": "system.orderExecutionPlan", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
-        { "variableUpdateId": "vu-ord-plan-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+        {
+          "variableUpdateId": "vu-ord-plan-out",
+          "fieldName": "system.orderExecutionPlan",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-plan-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
       ],
-      "width": 250, "height": 102
+      "width": 350,
+      "height": 142
     },
     {
       "id": "order_tool_executer",
       "type": "agent",
       "name": "tool_executer",
       "description": "Executes order API calls — create PO, finalize, confirm issued",
-      "position": { "x": 1175, "y": 98 },
+      "position": {
+        "x": 1159.2857142857144,
+        "y": -104.85714285714286
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": true, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": true,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "agentStrategy": "react",
-        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "model": {
+          "code": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "vendor": "anthropic",
+          "provider": "anthropic"
+        },
         "promptTemplate": [
           {
             "id": "ord-exec-sys-001",
@@ -157,7 +453,140 @@
             "text": "Execute this order plan:\n\n{{system.orderExecutionPlan}}\n\nContext:\n- Session ID: {{system.sessionId}}\n- Order intent: {{system.orderIntent}}\n\nExecute each step and return the full results JSON."
           }
         ],
-        "tools": [],
+        "tools": [
+          {
+            "_id": "575fd7a3-e60a-45fe-82a1-a2486d9747b8",
+            "name": "order_create",
+            "description": "Create a Purchase Order from an approved requisition. Returns po_id.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-order_create-12",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "req_id": {
+                    "title": "Req Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "req_id"
+                ],
+                "title": "order_createArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "e47ecc33-e9dd-4fec-93b5-55fec68223a6",
+            "name": "order_get",
+            "description": "Get full details of a Purchase Order.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-order_get-13",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "po_id": {
+                    "title": "Po Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "po_id"
+                ],
+                "title": "order_getArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "5a2c09e8-a065-461b-9ae6-0d2e3a978931",
+            "name": "order_finalize",
+            "description": "Lock and issue the PO to the supplier. Status becomes ISSUED.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-order_finalize-14",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "po_id": {
+                    "title": "Po Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "po_id"
+                ],
+                "title": "order_finalizeArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "935a496b-61d6-447c-ad72-0e65e4dc6183",
+            "name": "order_get_status",
+            "description": "Check the current status of a Purchase Order.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-order_get_status-15",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "po_id": {
+                    "title": "Po Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "po_id"
+                ],
+                "title": "order_get_statusArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          }
+        ],
         "resources": [],
         "libraries": [],
         "maxIterations": 10,
@@ -168,12 +597,56 @@
           "schema": {
             "type": "object",
             "properties": {
-              "status": { "type": "string", "enum": ["success", "partial", "error"] },
-              "steps_completed": { "type": "integer" },
-              "results": { "type": "object", "properties": { "po_id": { "type": "string" }, "po_status": { "type": "string" }, "req_id": { "type": "string" }, "supplier_id": { "type": "string" }, "lines": { "type": "array" }, "grand_total": { "type": "number" }, "deliver_to": { "type": "string" }, "need_by": { "type": "string" }, "issued_at": { "type": "string" } } },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "success",
+                  "partial",
+                  "error"
+                ]
+              },
+              "steps_completed": {
+                "type": "integer"
+              },
+              "results": {
+                "type": "object",
+                "properties": {
+                  "po_id": {
+                    "type": "string"
+                  },
+                  "po_status": {
+                    "type": "string"
+                  },
+                  "req_id": {
+                    "type": "string"
+                  },
+                  "supplier_id": {
+                    "type": "string"
+                  },
+                  "lines": {
+                    "type": "array"
+                  },
+                  "grand_total": {
+                    "type": "number"
+                  },
+                  "deliver_to": {
+                    "type": "string"
+                  },
+                  "need_by": {
+                    "type": "string"
+                  },
+                  "issued_at": {
+                    "type": "string"
+                  }
+                }
+              },
               "error": {}
             },
-            "required": ["status", "steps_completed", "results"],
+            "required": [
+              "status",
+              "steps_completed",
+              "results"
+            ],
             "additionalProperties": false
           }
         },
@@ -183,24 +656,60 @@
         "connectors": []
       },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-exec-out", "fieldName": "system.orderExecutionResults", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
-        { "variableUpdateId": "vu-po-id", "fieldName": "system.poId", "operation": "set", "value": "{{nodeOutput.structuredOutput.results.po_id}}" },
-        { "variableUpdateId": "vu-ord-exec-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+        {
+          "variableUpdateId": "vu-ord-exec-out",
+          "fieldName": "system.orderExecutionResults",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-po-id",
+          "fieldName": "system.poId",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput.results.po_id}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-exec-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
       ],
-      "width": 350, "height": 199
+      "width": 350,
+      "height": 172,
+      "selected": true,
+      "positionAbsolute": {
+        "x": 1159.2857142857144,
+        "y": -104.85714285714286
+      },
+      "dragging": false
     },
     {
       "id": "order_validator",
       "type": "agent",
       "name": "validator",
       "description": "Validates PO was created, issued, and linked correctly to the requisition",
-      "position": { "x": 1503, "y": 102 },
+      "position": {
+        "x": 1503,
+        "y": 102
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "agentStrategy": "react",
-        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
         "promptTemplate": [
           {
             "id": "ord-validator-sys-001",
@@ -224,13 +733,31 @@
           "schema": {
             "type": "object",
             "properties": {
-              "validation_passed": { "type": "boolean" },
-              "checks": { "type": "array" },
-              "issues": { "type": "array" },
-              "recommendation": { "type": "string", "enum": ["PROCEED", "NEEDS_CLARIFICATION", "ABORT"] },
+              "validation_passed": {
+                "type": "boolean"
+              },
+              "checks": {
+                "type": "array"
+              },
+              "issues": {
+                "type": "array"
+              },
+              "recommendation": {
+                "type": "string",
+                "enum": [
+                  "PROCEED",
+                  "NEEDS_CLARIFICATION",
+                  "ABORT"
+                ]
+              },
               "clarification_question": {}
             },
-            "required": ["validation_passed", "checks", "issues", "recommendation"],
+            "required": [
+              "validation_passed",
+              "checks",
+              "issues",
+              "recommendation"
+            ],
             "additionalProperties": false
           }
         },
@@ -240,23 +767,48 @@
         "connectors": []
       },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-val-out", "fieldName": "system.orderValidationReport", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
-        { "variableUpdateId": "vu-ord-val-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+        {
+          "variableUpdateId": "vu-ord-val-out",
+          "fieldName": "system.orderValidationReport",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-val-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
       ],
-      "width": 250, "height": 102
+      "width": 350,
+      "height": 142
     },
     {
       "id": "order_event_builder",
       "type": "agent",
       "name": "event_builder",
       "description": "Builds the POIssued domain event for the GR agent",
-      "position": { "x": 1839, "y": 98 },
+      "position": {
+        "x": 1810.4285714285713,
+        "y": -77.71428571428572
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "agentStrategy": "react",
-        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
         "promptTemplate": [
           {
             "id": "ord-event-sys-001",
@@ -280,13 +832,35 @@
           "schema": {
             "type": "object",
             "properties": {
-              "event_type": { "type": "string" },
-              "event_id": { "type": "string" },
-              "timestamp": { "type": "string" },
-              "payload": { "type": "object" },
-              "routing": { "type": "object", "properties": { "next_node": {}, "requires_approval": { "type": "boolean" } } }
+              "event_type": {
+                "type": "string"
+              },
+              "event_id": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              },
+              "payload": {
+                "type": "object"
+              },
+              "routing": {
+                "type": "object",
+                "properties": {
+                  "next_node": {},
+                  "requires_approval": {
+                    "type": "boolean"
+                  }
+                }
+              }
             },
-            "required": ["event_type", "event_id", "timestamp", "payload", "routing"],
+            "required": [
+              "event_type",
+              "event_id",
+              "timestamp",
+              "payload",
+              "routing"
+            ],
             "additionalProperties": false
           }
         },
@@ -296,23 +870,54 @@
         "connectors": []
       },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-event-out", "fieldName": "system.orderDomainEvent", "operation": "set", "value": "{{nodeOutput.structuredOutput}}" },
-        { "variableUpdateId": "vu-ord-event-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+        {
+          "variableUpdateId": "vu-ord-event-out",
+          "fieldName": "system.orderDomainEvent",
+          "operation": "set",
+          "value": "{{nodeOutput.structuredOutput}}"
+        },
+        {
+          "variableUpdateId": "vu-ord-event-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
       ],
-      "width": 250, "height": 102
+      "width": 308,
+      "height": 126,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1810.4285714285713,
+        "y": -77.71428571428572
+      },
+      "dragging": false
     },
     {
       "id": "order_response_builder",
       "type": "agent",
       "name": "response_builder",
       "description": "Builds buyer-friendly response confirming PO was created and issued",
-      "position": { "x": 2167, "y": 98 },
+      "position": {
+        "x": 2167,
+        "y": 98
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "agentStrategy": "react",
-        "model": { "code": "gpt-5-mini", "name": "OpenAI GPT-5 mini", "vendor": "openai", "provider": "azureopenai" },
+        "model": {
+          "code": "gpt-5-mini",
+          "name": "OpenAI GPT-5 mini",
+          "vendor": "openai",
+          "provider": "azureopenai"
+        },
         "promptTemplate": [
           {
             "id": "ord-resp-sys-001",
@@ -329,82 +934,228 @@
         "resources": [],
         "libraries": [],
         "maxIterations": 1,
-        "structuredOutput": { "enable": false, "name": "", "description": "", "schema": { "type": "object", "properties": {}, "required": [], "additionalProperties": false } },
+        "structuredOutput": {
+          "enable": false,
+          "name": "",
+          "description": "",
+          "schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        },
         "includeThoughts": false,
         "skills": [],
         "guardrails": [],
         "connectors": []
       },
       "variableUpdates": [
-        { "variableUpdateId": "vu-ord-resp-msg", "fieldName": "thread.messages", "operation": "append", "value": "{{nodeOutput.text}}", "role": "assistant" }
+        {
+          "variableUpdateId": "vu-ord-resp-msg",
+          "fieldName": "thread.messages",
+          "operation": "append",
+          "value": "{{nodeOutput.text}}",
+          "role": "assistant"
+        }
       ],
-      "width": 269, "height": 102
+      "width": 350,
+      "height": 142
     },
     {
       "id": "output",
       "type": "output",
       "name": "output",
       "description": "Final output of the Order orchestration",
-      "position": { "x": 2499, "y": 101 },
+      "position": {
+        "x": 2617.5714285714284,
+        "y": -4.714285714285722
+      },
       "deletable": true,
       "data": {},
-      "properties": { "retryOnFailure": false, "maxRetries": 3, "retryInterval": 2000, "errorHandling": "none" },
+      "properties": {
+        "retryOnFailure": false,
+        "maxRetries": 3,
+        "retryInterval": 2000,
+        "errorHandling": "none"
+      },
       "config": {
         "enableImageRendering": false,
         "outputMapping": {
-          "messages": { "type": "string", "value": "{{thread.messages}}" },
-          "files": { "type": "array", "value": "{{system.files}}" },
-          "domain_event": { "type": "object", "value": "{{system.orderDomainEvent}}" },
-          "po_id": { "type": "string", "value": "{{system.poId}}" },
-          "validation_report": { "type": "object", "value": "{{system.orderValidationReport}}" },
-          "selectedAgentId": { "type": "string", "value": "{{runtime.workflowMetaData.workflowId}}" },
-          "selectedAgentName": { "type": "string", "value": "{{runtime.workflowMetaData.agentName}}" }
+          "messages": {
+            "type": "string",
+            "value": "{{thread.messages}}"
+          },
+          "files": {
+            "type": "array",
+            "value": "{{system.files}}"
+          },
+          "domain_event": {
+            "type": "object",
+            "value": "{{system.orderDomainEvent}}"
+          },
+          "po_id": {
+            "type": "string",
+            "value": "{{system.poId}}"
+          },
+          "validation_report": {
+            "type": "object",
+            "value": "{{system.orderValidationReport}}"
+          },
+          "selectedAgentId": {
+            "type": "string",
+            "value": "{{runtime.workflowMetaData.workflowId}}"
+          },
+          "selectedAgentName": {
+            "type": "string",
+            "value": "{{runtime.workflowMetaData.agentName}}"
+          }
         },
-        "outcome": { "enabled": false, "variable": "" }
+        "outcome": {
+          "enabled": false,
+          "variable": ""
+        }
       },
-      "width": 150, "height": 96
+      "width": 150,
+      "height": 96,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 2617.5714285714284,
+        "y": -4.714285714285722
+      },
+      "dragging": false
     }
   ],
   "edges": [
-    { "id": "start-ord-intent", "source": "start", "target": "order_intent_analyzer", "type": "default", "data": { "sourceType": "start", "targetType": "agent" } },
-    { "id": "edge-ord-intent-planner", "source": "order_intent_analyzer", "target": "order_planner", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
-    { "id": "edge-ord-planner-exec", "source": "order_planner", "target": "order_tool_executer", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
-    { "id": "edge-ord-exec-validator", "source": "order_tool_executer", "target": "order_validator", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
-    { "id": "edge-ord-validator-event", "source": "order_validator", "target": "order_event_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
-    { "id": "edge-ord-event-resp", "source": "order_event_builder", "target": "order_response_builder", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "agent", "edgeSettings": { "contextTransfer": { "passContext": true, "transferType": "last_message" } } } },
-    { "id": "edge-ord-resp-output", "source": "order_response_builder", "target": "output", "style": { "strokeWidth": 3 }, "data": { "sourceType": "agent", "targetType": "output" } }
-  ],
-  "variables": {
-    "flow": [],
-    "system": [
-      { "name": "userQuery", "type": "string", "defaultValue": "" },
-      { "name": "sessionId", "type": "string", "defaultValue": "" },
-      { "name": "reqApprovedEvent", "type": "object", "defaultValue": {} },
-      { "name": "orderIntent", "type": "object", "defaultValue": {} },
-      { "name": "orderExecutionPlan", "type": "object", "defaultValue": {} },
-      { "name": "orderExecutionResults", "type": "object", "defaultValue": {} },
-      { "name": "poId", "type": "string", "defaultValue": "" },
-      { "name": "orderValidationReport", "type": "object", "defaultValue": {} },
-      { "name": "orderDomainEvent", "type": "object", "defaultValue": {} },
-      { "name": "files", "type": "array", "defaultValue": [] }
-    ]
-  },
-  "interface": {
-    "inputs": {
-      "message": { "type": "string", "description": "Trigger message", "required": true },
-      "reqApprovedEvent": { "type": "object", "description": "ReqApproved event from Req Agent", "required": true }
+    {
+      "id": "start-ord-intent",
+      "source": "start",
+      "target": "order_intent_analyzer",
+      "type": "default",
+      "data": {
+        "sourceType": "start",
+        "targetType": "agent"
+      }
     },
-    "outputs": {
-      "messages": { "type": "string", "description": "Full conversation thread" },
-      "domain_event": { "type": "object", "description": "POIssued event for GR Agent" },
-      "po_id": { "type": "string", "description": "Created PO ID" },
-      "validation_report": { "type": "object", "description": "Validation checks and results" }
+    {
+      "id": "edge-ord-intent-planner",
+      "source": "order_intent_analyzer",
+      "target": "order_planner",
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "edge-ord-planner-exec",
+      "source": "order_planner",
+      "target": "order_tool_executer",
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "edge-ord-exec-validator",
+      "source": "order_tool_executer",
+      "target": "order_validator",
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "edge-ord-validator-event",
+      "source": "order_validator",
+      "target": "order_event_builder",
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "edge-ord-event-resp",
+      "source": "order_event_builder",
+      "target": "order_response_builder",
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "agent",
+        "edgeSettings": {
+          "contextTransfer": {
+            "passContext": true,
+            "transferType": "last_message"
+          }
+        }
+      }
+    },
+    {
+      "id": "edge-ord-resp-output",
+      "source": "order_response_builder",
+      "target": "output",
+      "style": {
+        "strokeWidth": 3
+      },
+      "data": {
+        "sourceType": "agent",
+        "targetType": "output"
+      }
     }
-  },
-  "skills": [],
-  "publishChannels": [
-    { "refId": "api", "code": "api", "name": "API", "description": "Expose Order Agent as REST API" },
-    { "refId": "qi-ui", "code": "qi-ui", "name": "Qi UI", "description": "Make Order Agent available in GEP Qi interface" }
   ],
-  "security": { "activities": [{ "refId": "755000001", "code": "755000001", "name": "Home" }] }
+  "originalBpc": "20210511",
+  "originalEnvironment": "DEV",
+  "freezeRelease": false,
+  "overwriteOnNextRelease": false,
+  "fromModuleVersion": "v1784118576680514000",
+  "lastModifiedVersion": "v1784119252431123800",
+  "rebasedFromVersion": null,
+  "createdBy": "Penubala.Deeraj@gep.com",
+  "createdOn": "2026-07-15T08:18:47.325Z",
+  "updatedBy": "Penubala.Deeraj@gep.com",
+  "updatedOn": "2026-07-15T12:28:43.727Z",
+  "bpc": "20210511",
+  "environment": "DEV",
+  "appId": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+  "moduleId": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+  "version": "v1784119252431123800",
+  "bpcCode": "20210511",
+  "compliance": {}
 }

@@ -1,4 +1,84 @@
 {
+  "isMigrationFlagLocked": false,
+  "agenticWorkflowId": "3cdcada7-eaa0-489e-ade6-c6128e40552e",
+  "name": "p2pagent",
+  "displayName": "P2PAgent",
+  "description": "P2PAgent",
+  "isDisabled": false,
+  "isAvailableForMigration": false,
+  "editAs": "canvas",
+  "enableForAutoInvoke": false,
+  "includeThoughts": false,
+  "invocationType": "API",
+  "publishChannels": [
+    {
+      "refId": "api",
+      "code": "api",
+      "name": "API",
+      "description": "Expose the agent as a REST API for system and app integrations"
+    },
+    {
+      "refId": "qi-ui",
+      "code": "qi-ui",
+      "name": "Qi UI",
+      "description": "Make your agent available in GEP's Qi interface"
+    }
+  ],
+  "security": {
+    "activities": [
+      {
+        "refId": "10401051",
+        "code": "10401051",
+        "name": "Execute Contract"
+      }
+    ]
+  },
+  "skills": [],
+  "variables": {
+    "flow": [
+      {
+        "refId": "agentName",
+        "name": "agentName",
+        "type": "string",
+        "id": "var-16ouc1kch",
+        "default": "",
+        "required": false
+      },
+      {
+        "refId": "lastId",
+        "name": "lastId",
+        "type": "string",
+        "id": "var-p2p-lastid",
+        "default": "",
+        "required": false
+      }
+    ],
+    "system": []
+  },
+  "interface": {
+    "inputs": {
+      "message": {
+        "type": "string",
+        "description": "Buyer's natural language purchase or P2P request",
+        "required": true
+      },
+      "attachments": {
+        "type": "array",
+        "description": "Optional file attachments",
+        "required": false
+      }
+    },
+    "outputs": {
+      "messages": {
+        "type": "string",
+        "description": "Full conversation thread from the routed domain agent"
+      },
+      "routed_to": {
+        "type": "string",
+        "description": "Which domain agent was invoked: catalogagent | requisitionagent | orderagent | goodsreceiptagent | invoiceagent"
+      }
+    }
+  },
   "nodes": [
     {
       "id": "start",
@@ -31,7 +111,7 @@
           "variableUpdateId": "vu-001n0eid",
           "fieldName": "flow.agentName",
           "operation": "set",
-          "value": ""
+          "value": "{{nodeOutput.interface.inputs.agentName}}"
         },
         {
           "variableUpdateId": "vu-01ibb6pl",
@@ -81,7 +161,7 @@
         "y": -91.00000000000003
       },
       "deletable": true,
-      "selected": false,
+      "selected": true,
       "dragging": false,
       "data": {},
       "properties": {
@@ -114,7 +194,6 @@
         "resources": [],
         "libraries": [],
         "maxIterations": 1,
-        "includeThoughts": false,
         "structuredOutput": {
           "enable": true,
           "name": "RouterDecision",
@@ -137,13 +216,25 @@
               },
               "confidence": {
                 "type": "string",
-                "enum": ["high", "medium", "low"]
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
               }
             },
-            "required": ["agentName", "reason", "confidence"],
+            "required": [
+              "agentName",
+              "reason",
+              "confidence"
+            ],
             "additionalProperties": false
           }
-        }
+        },
+        "includeThoughts": false,
+        "skills": [],
+        "guardrails": [],
+        "connectors": []
       },
       "variableUpdates": [
         {
@@ -160,8 +251,8 @@
           "role": "assistant"
         }
       ],
-      "width": 250,
-      "height": 102,
+      "width": 350,
+      "height": 142,
       "positionAbsolute": {
         "x": 482.722491866012,
         "y": -91.00000000000003
@@ -315,7 +406,7 @@
       },
       "data": {},
       "width": 269,
-      "height": 305,
+      "height": 350,
       "selected": false,
       "positionAbsolute": {
         "x": 726.4285714285712,
@@ -367,6 +458,12 @@
           "operation": "extend",
           "value": "{{nodeOutput.messages}}",
           "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-catalog-lastid",
+          "fieldName": "flow.lastId",
+          "operation": "set",
+          "value": "{{nodeOutput.cart_id}}"
         }
       ],
       "width": 250,
@@ -404,7 +501,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "4fab7c28-500a-48f5-84d7-7f25be358e5a",
@@ -422,6 +519,12 @@
           "operation": "extend",
           "value": "{{nodeOutput.messages}}",
           "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-req-lastid",
+          "fieldName": "flow.lastId",
+          "operation": "set",
+          "value": "{{nodeOutput.req_id}}"
         }
       ],
       "width": 268,
@@ -459,7 +562,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "d03fe865-3eff-4c1b-a0de-6de7e1910e9f",
@@ -477,6 +580,12 @@
           "operation": "extend",
           "value": "{{nodeOutput.messages}}",
           "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-order-lastid",
+          "fieldName": "flow.lastId",
+          "operation": "set",
+          "value": "{{nodeOutput.po_id}}"
         }
       ],
       "width": 250,
@@ -514,7 +623,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "3f294ead-9bf2-4a8a-9a25-b78a1960331e",
@@ -532,6 +641,12 @@
           "operation": "extend",
           "value": "{{nodeOutput.messages}}",
           "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-gr-lastid",
+          "fieldName": "flow.lastId",
+          "operation": "set",
+          "value": "{{nodeOutput.gr_id}}"
         }
       ],
       "width": 250,
@@ -569,7 +684,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "9217be18-9df4-4d85-8611-2925177ae679",
@@ -587,6 +702,12 @@
           "operation": "extend",
           "value": "{{nodeOutput.messages}}",
           "role": "user"
+        },
+        {
+          "variableUpdateId": "vu-inv-lastid",
+          "fieldName": "flow.lastId",
+          "operation": "set",
+          "value": "{{nodeOutput.inv_id}}"
         }
       ],
       "width": 250,
@@ -614,7 +735,9 @@
       "id": "reactflow__edge-agent_0-dzm9wgp",
       "source": "agent_0",
       "target": "dzm9wgp",
-      "style": { "strokeWidth": 3 },
+      "style": {
+        "strokeWidth": 3
+      },
       "sourceHandle": null,
       "targetHandle": null,
       "data": {
@@ -623,154 +746,162 @@
       }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-dzm9wgpr-015ddvv0-5l63mn6",
       "source": "dzm9wgp",
-      "sourceHandle": "r-015ddvv0",
       "target": "5l63mn6",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": "r-015ddvv0",
       "targetHandle": null,
-      "data": { "sourceType": "rule", "targetType": "workflow" },
-      "id": "reactflow__edge-dzm9wgpr-015ddvv0-5l63mn6"
+      "data": {
+        "sourceType": "rule",
+        "targetType": "workflow"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-dzm9wgpr-017v4l5v-i8zz5eh",
       "source": "dzm9wgp",
-      "sourceHandle": "r-017v4l5v",
       "target": "i8zz5eh",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": "r-017v4l5v",
       "targetHandle": null,
-      "data": { "sourceType": "rule", "targetType": "workflow" },
-      "id": "reactflow__edge-dzm9wgpr-017v4l5v-i8zz5eh"
+      "data": {
+        "sourceType": "rule",
+        "targetType": "workflow"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-dzm9wgpr-018vadyb-hhtfzbx",
       "source": "dzm9wgp",
-      "sourceHandle": "r-018vadyb",
       "target": "hhtfzbx",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": "r-018vadyb",
       "targetHandle": null,
-      "data": { "sourceType": "rule", "targetType": "workflow" },
-      "id": "reactflow__edge-dzm9wgpr-018vadyb-hhtfzbx"
+      "data": {
+        "sourceType": "rule",
+        "targetType": "workflow"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-dzm9wgpr-00y04uak-1be8ngd",
       "source": "dzm9wgp",
-      "sourceHandle": "r-00y04uak",
       "target": "1be8ngd",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": "r-00y04uak",
       "targetHandle": null,
-      "data": { "sourceType": "rule", "targetType": "workflow" },
-      "id": "reactflow__edge-dzm9wgpr-00y04uak-1be8ngd"
+      "data": {
+        "sourceType": "rule",
+        "targetType": "workflow"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-dzm9wgpr-00nmnjqn-bcudwfx",
       "source": "dzm9wgp",
-      "sourceHandle": "r-00nmnjqn",
       "target": "bcudwfx",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": "r-00nmnjqn",
       "targetHandle": null,
-      "data": { "sourceType": "rule", "targetType": "workflow" },
-      "id": "reactflow__edge-dzm9wgpr-00nmnjqn-bcudwfx"
+      "data": {
+        "sourceType": "rule",
+        "targetType": "workflow"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-5l63mn6-output",
       "source": "5l63mn6",
-      "sourceHandle": null,
       "target": "output",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": null,
       "targetHandle": null,
-      "data": { "sourceType": "workflow", "targetType": "output" },
-      "id": "reactflow__edge-5l63mn6-output"
+      "data": {
+        "sourceType": "workflow",
+        "targetType": "output"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-i8zz5eh-output",
       "source": "i8zz5eh",
-      "sourceHandle": null,
       "target": "output",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": null,
       "targetHandle": null,
-      "data": { "sourceType": "workflow", "targetType": "output" },
-      "id": "reactflow__edge-i8zz5eh-output"
+      "data": {
+        "sourceType": "workflow",
+        "targetType": "output"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-hhtfzbx-output",
       "source": "hhtfzbx",
-      "sourceHandle": null,
       "target": "output",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": null,
       "targetHandle": null,
-      "data": { "sourceType": "workflow", "targetType": "output" },
-      "id": "reactflow__edge-hhtfzbx-output"
+      "data": {
+        "sourceType": "workflow",
+        "targetType": "output"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-1be8ngd-output",
       "source": "1be8ngd",
-      "sourceHandle": null,
       "target": "output",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": null,
       "targetHandle": null,
-      "data": { "sourceType": "workflow", "targetType": "output" },
-      "id": "reactflow__edge-1be8ngd-output"
+      "data": {
+        "sourceType": "workflow",
+        "targetType": "output"
+      }
     },
     {
-      "style": { "strokeWidth": 3 },
+      "id": "reactflow__edge-bcudwfx-output",
       "source": "bcudwfx",
-      "sourceHandle": null,
       "target": "output",
+      "style": {
+        "strokeWidth": 3
+      },
+      "sourceHandle": null,
       "targetHandle": null,
-      "data": { "sourceType": "workflow", "targetType": "output" },
-      "id": "reactflow__edge-bcudwfx-output"
+      "data": {
+        "sourceType": "workflow",
+        "targetType": "output"
+      }
     }
   ],
-  "variables": {
-    "flow": [
-      {
-        "id": "var-16ouc1kch",
-        "name": "agentName",
-        "type": "string",
-        "default": "",
-        "required": false
-      }
-    ],
-    "system": []
-  },
-  "interface": {
-    "inputs": {
-      "message": {
-        "type": "string",
-        "description": "Buyer's natural language purchase or P2P request",
-        "required": true
-      },
-      "attachments": {
-        "type": "array",
-        "description": "Optional file attachments",
-        "required": false
-      }
-    },
-    "outputs": {
-      "messages": {
-        "type": "string",
-        "description": "Full conversation thread from the routed domain agent"
-      },
-      "routed_to": {
-        "type": "string",
-        "description": "Which domain agent was invoked: catalogagent | requisitionagent | orderagent | goodsreceiptagent | invoiceagent"
-      }
-    }
-  },
-  "skills": [],
-  "publishChannels": [
-    {
-      "refId": "api",
-      "code": "api",
-      "name": "API",
-      "description": "Expose the agent as a REST API for system and app integrations"
-    },
-    {
-      "refId": "qi-ui",
-      "code": "qi-ui",
-      "name": "Qi UI",
-      "description": "Make your agent available in GEP's Qi interface"
-    }
-  ],
-  "security": {
-    "activities": [
-      {
-        "refId": "755000001",
-        "code": "755000001",
-        "name": "Home"
-      }
-    ]
-  }
+  "originalBpc": "20210511",
+  "originalEnvironment": "DEV",
+  "freezeRelease": false,
+  "overwriteOnNextRelease": false,
+  "fromModuleVersion": "v1784118576680514000",
+  "lastModifiedVersion": "v1784119252431123800",
+  "rebasedFromVersion": null,
+  "createdBy": "Penubala.Deeraj@gep.com",
+  "createdOn": "2026-07-15T08:21:09.956Z",
+  "updatedBy": "Penubala.Deeraj@gep.com",
+  "updatedOn": "2026-07-15T12:27:10.156Z",
+  "bpc": "20210511",
+  "environment": "DEV",
+  "appId": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+  "moduleId": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+  "version": "v1784119252431123800",
+  "bpcCode": "20210511",
+  "compliance": {}
 }

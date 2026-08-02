@@ -1,6 +1,8 @@
 # P2P Hackathon MCP Server
 
-Fully in-memory MCP server for the P2P AI Agent hackathon. **No database required.**
+In-memory MCP server for the P2P AI Agent hackathon, with a lightweight JSON-file
+persistence layer so state survives a Render cold start mid-demo. **No database
+required.**
 
 ## Run
 
@@ -10,7 +12,15 @@ python3 server.py
 
 Transport: `stdio` (wire directly into GEP P2P agent tool nodes).
 
-## Tools (25 total)
+## Persistence
+
+State (carts, reqs, POs, GRs, invoices) is written to `p2p_state.json` next to
+`server.py` after every mutating call and reloaded on startup. This protects a
+live demo from Render's free-tier ~15 min idle spin-down wiping in-memory state
+between the pitch and the walkthrough. Call `demo_reset` to clear it for a clean
+re-run.
+
+## Tools (26 total)
 
 ### Catalog Agent
 | Tool | Description |
@@ -28,9 +38,9 @@ Transport: `stdio` (wire directly into GEP P2P agent tool nodes).
 | `req_create` | Create requisition from flipped cart → returns `req_id` |
 | `req_set_accounting` | Set cost_center + gl_account |
 | `req_set_delivery` | Set deliver_to + need_by date |
-| `req_submit` | Submit for approval → status: PENDING_APPROVAL |
+| `req_submit` | Submit for approval → status: PENDING_APPROVAL. Computes an `approval_tier` (AUTO ≤$2k / MANAGER ≤$20k / DIRECTOR >$20k) from spend |
 | `req_get_status` | Poll status |
-| `req_approve` | Auto-approve → status: APPROVED |
+| `req_approve` | Approve → status: APPROVED. DIRECTOR-tier reqs approved without an `approver_note` come back with `audit_flag: true` |
 
 ### Order Agent
 | Tool | Description |
@@ -51,11 +61,16 @@ Transport: `stdio` (wire directly into GEP P2P agent tool nodes).
 ### Invoice Agent
 | Tool | Description |
 |---|---|
-| `invoice_create` | Create invoice from confirmed GR → returns `inv_id` |
+| `invoice_create` | Create invoice from confirmed GR → returns `inv_id`. Blocks duplicate invoicing against the same PO |
 | `invoice_match` | Run 3-way match (PO vs GR vs Invoice, 2% tolerance) |
 | `invoice_get_match_result` | Get per-line match deltas |
 | `invoice_approve` | Approve invoice |
 | `invoice_finalize` | Finalise → emits InvoicePaid event, P2P cycle COMPLETE |
+
+### Demo Tools
+| Tool | Description |
+|---|---|
+| `demo_reset` | Clear all carts/reqs/POs/GRs/invoices for a clean re-run. Catalog is unaffected |
 
 ## Pre-seeded Catalog Items
 
@@ -79,3 +94,30 @@ catalog_search → cart_create → cart_add_item → cart_view → cart_flip
 → gr_create → gr_record → gr_confirm
 → invoice_create → invoice_match → invoice_approve → invoice_finalize
 ```
+
+## QiStudio Agents (`main_agent.json`, `catalog_agent_fixed_1.json`, `req_agent.json`,
+`order_agent.json`, `gr_agent.json`, `invoice_agent.json`)
+
+Each domain agent is a 6-node pipeline (Intent Analyzer → Planner → Tool Executer →
+Validator → Event Builder → Response Builder), routed by `main_agent.json`'s
+router + rule node.
+
+**Fixed a chaining bug**: the router previously invoked each downstream agent with
+only the raw buyer message, never the structured event object (`cartFlipEvent`,
+`reqApprovedEvent`, `poIssuedEvent`, `grConfirmedEvent`) that agent's Intent
+Analyzer expected as a *required* input — so anything past the Catalog stage had
+nothing to extract from. Fixed by:
+- adding a `flow.lastId` variable in `main_agent.json` that captures the ID
+  (`cart_id`/`req_id`/`po_id`/`gr_id`) produced by each stage and threads it into
+  the next stage's message as `[System context: last_created_id=...]`;
+- making the event-object inputs optional on each downstream agent, with the
+  Intent Analyzer falling back to parsing the ID out of the message/context
+  annotation — the actual MCP tools (`req_create`, `order_create`, `gr_create`,
+  `invoice_create`) only ever needed that one ID, since they look up the rest of
+  the record server-side.
+
+Also fixed `gr_confirm` dropping `unit_price` from its output, which silently
+priced every invoice line at 0 and made `invoice_match` always report MISMATCH.
+
+All six workflows are enabled (`isDisabled: false`). Re-import these JSONs into
+QiStudio to pick up the fixes.

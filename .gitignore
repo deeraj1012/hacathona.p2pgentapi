@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+p2p_state.json
+p2p_state.json.tmp

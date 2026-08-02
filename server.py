@@ -5,7 +5,7 @@ Covers: Catalog, Requisition, Order, Goods Receipt, Invoice agents.
 
 from mcp.server.fastmcp import FastMCP
 from datetime import datetime, timezone
-import uuid, random
+import uuid, random, json, os
 
 mcp = FastMCP("p2p-hackathon")
 
@@ -27,6 +27,33 @@ REQS: dict = {}        # req_id -> req dict
 ORDERS: dict = {}      # po_id -> po dict
 GRS: dict = {}         # gr_id -> gr dict
 INVOICES: dict = {}    # inv_id -> invoice dict
+
+# Render's free tier cold-starts the process after ~15 min idle, which would
+# otherwise wipe every cart/req/PO/GR/invoice mid-demo. Persist to disk so state
+# survives a restart between the pitch and the live walkthrough.
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "p2p_state.json")
+
+def _save_state() -> None:
+    tmp_path = STATE_FILE + ".tmp"
+    with open(tmp_path, "w") as f:
+        json.dump({"carts": CARTS, "reqs": REQS, "orders": ORDERS, "grs": GRS, "invoices": INVOICES}, f)
+    os.replace(tmp_path, STATE_FILE)
+
+def _load_state() -> None:
+    if not os.path.exists(STATE_FILE):
+        return
+    try:
+        with open(STATE_FILE) as f:
+            data = json.load(f)
+        CARTS.update(data.get("carts", {}))
+        REQS.update(data.get("reqs", {}))
+        ORDERS.update(data.get("orders", {}))
+        GRS.update(data.get("grs", {}))
+        INVOICES.update(data.get("invoices", {}))
+    except (json.JSONDecodeError, OSError):
+        pass
+
+_load_state()
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -91,6 +118,7 @@ def cart_create(session_id: str = None) -> dict:
         "status": "OPEN",
         "created_at": _now(),
     }
+    _save_state()
     return {"cart_id": cart_id, "status": "OPEN"}
 
 
@@ -120,6 +148,7 @@ def cart_add_item(cart_id: str, item_id: str, quantity: int) -> dict:
             "supplier_id": item["supplier_id"],
         })
     cart["grand_total"] = sum(l["line_total"] for l in cart["lines"])
+    _save_state()
     return {"cart_id": cart_id, "lines_count": len(cart["lines"]), "grand_total": cart["grand_total"]}
 
 
@@ -144,6 +173,7 @@ def cart_flip(cart_id: str) -> dict:
     cart["status"] = "FLIPPED"
     cart["flipped_at"] = _now()
     cart["grand_total"] = sum(l["line_total"] for l in cart["lines"])
+    _save_state()
     return {
         "cart_id": cart_id,
         "status": "FLIPPED",
@@ -177,6 +207,7 @@ def req_create(cart_id: str) -> dict:
         "need_by": None,
         "created_at": _now(),
     }
+    _save_state()
     return {"req_id": req_id, "status": "DRAFT", "grand_total": REQS[req_id]["grand_total"]}
 
 
@@ -187,6 +218,7 @@ def req_set_accounting(req_id: str, cost_center: str, gl_account: str) -> dict:
         return {"error": f"Requisition {req_id} not found"}
     REQS[req_id]["cost_center"] = cost_center
     REQS[req_id]["gl_account"] = gl_account
+    _save_state()
     return {"req_id": req_id, "cost_center": cost_center, "gl_account": gl_account, "updated": True}
 
 
@@ -197,18 +229,36 @@ def req_set_delivery(req_id: str, deliver_to: str, need_by: str = None) -> dict:
         return {"error": f"Requisition {req_id} not found"}
     REQS[req_id]["deliver_to"] = deliver_to
     REQS[req_id]["need_by"] = need_by
+    _save_state()
     return {"req_id": req_id, "deliver_to": deliver_to, "need_by": need_by, "updated": True}
+
+
+def _approval_tier(grand_total: float) -> str:
+    """Real P2P routes approval by spend threshold rather than blanket auto-approving everything."""
+    if grand_total <= 2000:
+        return "AUTO"
+    if grand_total <= 20000:
+        return "MANAGER"
+    return "DIRECTOR"
 
 
 @mcp.tool()
 def req_submit(req_id: str) -> dict:
-    """Submit a requisition into the approval workflow."""
+    """Submit a requisition into the approval workflow. Computes an approval tier (AUTO/MANAGER/DIRECTOR) from spend."""
     if req_id not in REQS:
         return {"error": f"Requisition {req_id} not found"}
     req = REQS[req_id]
     req["status"] = "PENDING_APPROVAL"
     req["submitted_at"] = _now()
-    return {"req_id": req_id, "status": "PENDING_APPROVAL", "submitted_at": req["submitted_at"]}
+    req["approval_tier"] = _approval_tier(req.get("grand_total", 0))
+    _save_state()
+    return {
+        "req_id": req_id,
+        "status": "PENDING_APPROVAL",
+        "submitted_at": req["submitted_at"],
+        "approval_tier": req["approval_tier"],
+        "grand_total": req["grand_total"],
+    }
 
 
 @mcp.tool()
@@ -223,17 +273,23 @@ def req_get_status(req_id: str) -> dict:
 
 
 @mcp.tool()
-def req_approve(req_id: str) -> dict:
-    """Approve the requisition (auto-approve for demo). Status becomes APPROVED."""
+def req_approve(req_id: str, approver_note: str = None) -> dict:
+    """Approve the requisition. Status becomes APPROVED. DIRECTOR-tier reqs (>20000) are flagged for audit if approved without an approver_note."""
     if req_id not in REQS:
         return {"error": f"Requisition {req_id} not found"}
     req = REQS[req_id]
     req["status"] = "APPROVED"
     req["approved_at"] = _now()
+    req["approver_note"] = approver_note
+    tier = req.get("approval_tier", _approval_tier(req.get("grand_total", 0)))
+    audit_flag = tier == "DIRECTOR" and not approver_note
+    _save_state()
     return {
         "req_id": req_id,
         "status": "APPROVED",
         "approved_at": req["approved_at"],
+        "approval_tier": tier,
+        "audit_flag": audit_flag,
         "lines": req["lines"],
         "grand_total": req["grand_total"],
     }
@@ -263,6 +319,7 @@ def order_create(req_id: str) -> dict:
         "status": "DRAFT",
         "created_at": _now(),
     }
+    _save_state()
     return {"po_id": po_id, "status": "DRAFT", "supplier_id": supplier_id, "grand_total": req["grand_total"]}
 
 
@@ -282,6 +339,7 @@ def order_finalize(po_id: str) -> dict:
     po = ORDERS[po_id]
     po["status"] = "ISSUED"
     po["issued_at"] = _now()
+    _save_state()
     return {
         "po_id": po_id,
         "status": "ISSUED",
@@ -330,6 +388,7 @@ def gr_create(po_id: str) -> dict:
         "status": "OPEN",
         "created_at": _now(),
     }
+    _save_state()
     return {"gr_id": gr_id, "po_id": po_id, "status": "OPEN", "lines_count": len(GRS[gr_id]["lines"])}
 
 
@@ -347,6 +406,7 @@ def gr_record(gr_id: str, receipts: list) -> dict:
         if line["po_line_id"] in receipt_map:
             line["qty_received"] = receipt_map[line["po_line_id"]]
     gr["status"] = "RECORDED"
+    _save_state()
     return {"gr_id": gr_id, "status": "RECORDED", "lines": gr["lines"]}
 
 
@@ -371,6 +431,7 @@ def gr_confirm(gr_id: str) -> dict:
             "item_name": line["item_name"],
             "qty_ordered": qty_ord,
             "qty_received": qty_recv,
+            "unit_price": line["unit_price"],
             "discrepancy": discrepancy,
             "line_value": line_val,
         })
@@ -383,6 +444,7 @@ def gr_confirm(gr_id: str) -> dict:
     gr["lines_out"] = lines_out
     gr["mismatches"] = mismatches
     gr["total_received_value"] = total_received_value
+    _save_state()
     return {
         "gr_id": gr_id,
         "po_id": gr["po_id"],
@@ -413,6 +475,13 @@ def invoice_create(gr_id: str) -> dict:
     if gr["status"] not in ("CONFIRMED", "EXCEPTION"):
         return {"error": f"GR must be CONFIRMED or EXCEPTION (current: {gr['status']})"}
     po_id = gr["po_id"]
+    existing = next((inv for inv in INVOICES.values() if inv["po_id"] == po_id), None)
+    if existing:
+        return {
+            "error": f"Duplicate invoice blocked: PO {po_id} already has invoice {existing['inv_number']} "
+                     f"({existing['inv_id']}, status: {existing['status']}).",
+            "duplicate_of": existing["inv_id"],
+        }
     po = ORDERS.get(po_id, {})
     inv_id = _id("INV")
     inv_number = f"INV-2024-{random.randint(1000, 9999)}"
@@ -439,6 +508,7 @@ def invoice_create(gr_id: str) -> dict:
         "status": "DRAFT",
         "created_at": _now(),
     }
+    _save_state()
     return {"inv_id": inv_id, "inv_number": inv_number, "status": "DRAFT",
             "inv_total": INVOICES[inv_id]["inv_total"]}
 
@@ -488,6 +558,7 @@ def invoice_match(inv_id: str) -> dict:
     inv["match_status"] = overall
     inv["match_result"] = match_result
     inv["status"] = "MATCHED" if overall == "MATCHED" else "MISMATCH"
+    _save_state()
     return {"inv_id": inv_id, "match_status": overall, "match_result": match_result}
 
 
@@ -513,6 +584,7 @@ def invoice_approve(inv_id: str) -> dict:
     inv["approved_at"] = _now()
     note = "Auto-approved: 3-way match passed" if inv["match_status"] == "MATCHED" \
         else "Approved with flag: match discrepancy noted"
+    _save_state()
     return {"inv_id": inv_id, "status": "APPROVED", "approved_at": inv["approved_at"],
             "match_status": inv["match_status"], "note": note}
 
@@ -527,6 +599,7 @@ def invoice_finalize(inv_id: str) -> dict:
         return {"error": f"Invoice must be APPROVED (current: {inv['status']})"}
     inv["status"] = "PAID"
     inv["paid_at"] = _now()
+    _save_state()
     return {
         "inv_id": inv_id,
         "inv_number": inv["inv_number"],
@@ -540,12 +613,26 @@ def invoice_finalize(inv_id: str) -> dict:
     }
 
 
+# ── DEMO TOOLS ──────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def demo_reset() -> dict:
+    """Clear all P2P demo state (carts, reqs, POs, GRs, invoices) for a clean re-run. Catalog items are unaffected."""
+    CARTS.clear()
+    REQS.clear()
+    ORDERS.clear()
+    GRS.clear()
+    INVOICES.clear()
+    _save_state()
+    return {"status": "reset", "message": "All P2P demo state cleared. Catalog is unaffected."}
+
+
 # ── Health check (for Render / load balancers) ────────────────────────────────
 
 @mcp.custom_route("/mcp-health", methods=["GET"])
 async def health(request):
     from starlette.responses import JSONResponse
-    return JSONResponse({"status": "ok", "tools": 25, "service": "p2p-hackathon-mcp"})
+    return JSONResponse({"status": "ok", "tools": 26, "service": "p2p-hackathon-mcp"})
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

@@ -1,4 +1,152 @@
 {
+  "isMigrationFlagLocked": false,
+  "agenticWorkflowId": "6bb4f720-5634-4b79-b3dd-db89e211463a",
+  "name": "catalogagent",
+  "displayName": "CatalogAgent",
+  "description": "An Agent which will ease the P2P buying process",
+  "isDisabled": false,
+  "isAvailableForMigration": false,
+  "editAs": "canvas",
+  "enableForAutoInvoke": false,
+  "includeThoughts": false,
+  "invocationType": "API",
+  "publishChannels": [
+    {
+      "refId": "api",
+      "code": "api",
+      "name": "API",
+      "description": "Expose the Catalog Agent as a REST API"
+    },
+    {
+      "refId": "qi-ui",
+      "code": "qi-ui",
+      "name": "Qi UI",
+      "description": "Make the Catalog Agent available in GEP Qi interface"
+    }
+  ],
+  "security": {
+    "activities": [
+      {
+        "refId": "755000001",
+        "code": "755000001",
+        "name": "Home"
+      }
+    ]
+  },
+  "skills": [],
+  "variables": {
+    "flow": [],
+    "system": [
+      {
+        "refId": "userQuery",
+        "name": "userQuery",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "refId": "attachments",
+        "name": "attachments",
+        "type": "array",
+        "defaultValue": []
+      },
+      {
+        "refId": "sessionId",
+        "name": "sessionId",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "refId": "buyerId",
+        "name": "buyerId",
+        "type": "string",
+        "defaultValue": "BUYER-001"
+      },
+      {
+        "refId": "procurementIntent",
+        "name": "procurementIntent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "executionPlan",
+        "name": "executionPlan",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "executionResults",
+        "name": "executionResults",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "cartId",
+        "name": "cartId",
+        "type": "string",
+        "defaultValue": ""
+      },
+      {
+        "refId": "cartFlipEvent",
+        "name": "cartFlipEvent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "validationReport",
+        "name": "validationReport",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "domainEvent",
+        "name": "domainEvent",
+        "type": "object",
+        "defaultValue": {}
+      },
+      {
+        "refId": "files",
+        "name": "files",
+        "type": "array",
+        "defaultValue": []
+      }
+    ]
+  },
+  "interface": {
+    "inputs": {
+      "message": {
+        "type": "string",
+        "description": "Buyer's natural language purchase request",
+        "required": true
+      },
+      "attachments": {
+        "type": "array",
+        "description": "Optional file attachments",
+        "required": false
+      }
+    },
+    "outputs": {
+      "messages": {
+        "type": "string",
+        "description": "Full conversation thread"
+      },
+      "domain_event": {
+        "type": "object",
+        "description": "CartFlipped or CatalogSearchCompleted event for downstream agents"
+      },
+      "cart_id": {
+        "type": "string",
+        "description": "Cart ID if cart was created"
+      },
+      "cart_flip_event": {
+        "type": "object",
+        "description": "CartFlipped event payload with all line items"
+      },
+      "validation_report": {
+        "type": "object",
+        "description": "Validation checks and results"
+      }
+    }
+  },
   "nodes": [
     {
       "id": "start",
@@ -199,8 +347,8 @@
       "name": "planner",
       "description": "Decides which catalog API calls to make based on the extracted intent",
       "position": {
-        "x": 832,
-        "y": 98
+        "x": 870.2012738853504,
+        "y": 289.0063694267516
       },
       "deletable": true,
       "selected": false,
@@ -305,7 +453,11 @@
         }
       ],
       "width": 250,
-      "height": 102
+      "height": 102,
+      "positionAbsolute": {
+        "x": 870.2012738853504,
+        "y": 289.0063694267516
+      }
     },
     {
       "id": "vzke7q4",
@@ -313,11 +465,11 @@
       "name": "tool_executer",
       "description": "Executes the catalog API calls via MCP tools and collects results",
       "position": {
-        "x": 1175,
-        "y": 98
+        "x": 1206.038535031847,
+        "y": -95.39394904458598
       },
       "deletable": true,
-      "selected": false,
+      "selected": true,
       "dragging": false,
       "data": {},
       "properties": {
@@ -329,10 +481,10 @@
       "config": {
         "agentStrategy": "react",
         "model": {
-          "code": "gpt-5-mini",
-          "name": "OpenAI GPT-5 mini",
-          "vendor": "openai",
-          "provider": "azureopenai"
+          "code": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "vendor": "anthropic",
+          "provider": "anthropic"
         },
         "promptTemplate": [
           {
@@ -346,7 +498,224 @@
             "text": "Execute this plan using the MCP catalog tools:\n\n{{system.executionPlan}}\n\nBuyer context:\n- Session ID: {{system.sessionId}}\n- Original query: {{system.userQuery}}\n- Intent details: {{system.procurementIntent}}\n\nExecute each step in order and return the full results JSON."
           }
         ],
-        "tools": [],
+        "tools": [
+          {
+            "_id": "6120b6c0-66bc-48f2-ac86-84bc97e53961",
+            "name": "catalog_search",
+            "description": "Search the GEP catalog for items matching a keyword query.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-catalog_search-0",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "title": "Query",
+                    "type": "string"
+                  },
+                  "category": {
+                    "default": null,
+                    "title": "Category",
+                    "type": "string"
+                  },
+                  "max_price": {
+                    "default": null,
+                    "title": "Max Price",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "title": "catalog_searchArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "892d9f6a-78dd-4abd-8714-e53477bceb28",
+            "name": "catalog_get_item",
+            "description": "Get detailed information for a specific catalog item by item_id.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-catalog_get_item-1",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "item_id": {
+                    "title": "Item Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id"
+                ],
+                "title": "catalog_get_itemArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "82b5b49b-5786-4357-a40c-874cf65e903b",
+            "name": "cart_create",
+            "description": "Create a new empty shopping cart. Returns cart_id.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-cart_create-2",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "session_id": {
+                    "default": null,
+                    "title": "Session Id",
+                    "type": "string"
+                  }
+                },
+                "title": "cart_createArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "c2d9726d-bf15-4618-b9e6-f6a2900ade02",
+            "name": "cart_add_item",
+            "description": "Add an item and quantity to an existing cart.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-cart_add_item-3",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cart_id": {
+                    "title": "Cart Id",
+                    "type": "string"
+                  },
+                  "item_id": {
+                    "title": "Item Id",
+                    "type": "string"
+                  },
+                  "quantity": {
+                    "title": "Quantity",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cart_id",
+                  "item_id",
+                  "quantity"
+                ],
+                "title": "cart_add_itemArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "715e35e0-db68-4ed6-9a6b-2a159e160032",
+            "name": "cart_view",
+            "description": "View the current contents and total of a cart.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-cart_view-4",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cart_id": {
+                    "title": "Cart Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "cart_id"
+                ],
+                "title": "cart_viewArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "eccd1e8a-46da-470e-a224-632b85a73fa8",
+            "name": "cart_flip",
+            "description": "Finalise/flip the cart — locks it and makes it ready for requisition.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-cart_flip-5",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cart_id": {
+                    "title": "Cart Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "cart_id"
+                ],
+                "title": "cart_flipArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          }
+        ],
         "resources": [],
         "libraries": [],
         "maxIterations": 10,
@@ -434,7 +803,11 @@
         }
       ],
       "width": 350,
-      "height": 199
+      "height": 199,
+      "positionAbsolute": {
+        "x": 1206.038535031847,
+        "y": -95.39394904458598
+      }
     },
     {
       "id": "352lwjp",
@@ -442,8 +815,8 @@
       "name": "validator",
       "description": "Validates execution results — checks for errors, discrepancies, missing items, or budget overruns",
       "position": {
-        "x": 1503,
-        "y": 102
+        "x": 1529.2633757961783,
+        "y": 347.9207006369427
       },
       "deletable": true,
       "selected": false,
@@ -549,7 +922,11 @@
         }
       ],
       "width": 250,
-      "height": 102
+      "height": 102,
+      "positionAbsolute": {
+        "x": 1529.2633757961783,
+        "y": 347.9207006369427
+      }
     },
     {
       "id": "al94c4t",
@@ -557,8 +934,8 @@
       "name": "event_builder",
       "description": "Builds the CartFlipped domain event payload for downstream Req node consumption",
       "position": {
-        "x": 1839,
-        "y": 98
+        "x": 1843.7751592356688,
+        "y": -188.50955414012736
       },
       "deletable": true,
       "selected": false,
@@ -654,7 +1031,11 @@
         }
       ],
       "width": 250,
-      "height": 102
+      "height": 102,
+      "positionAbsolute": {
+        "x": 1843.7751592356688,
+        "y": -188.50955414012736
+      }
     },
     {
       "id": "jdcoa2j",
@@ -662,8 +1043,8 @@
       "name": "response_builder",
       "description": "Builds a clear buyer-friendly natural language response summarising what was accomplished",
       "position": {
-        "x": 2167,
-        "y": 98
+        "x": 2143.124203821656,
+        "y": 289.0063694267516
       },
       "deletable": true,
       "selected": false,
@@ -725,7 +1106,11 @@
         }
       ],
       "width": 269,
-      "height": 102
+      "height": 102,
+      "positionAbsolute": {
+        "x": 2143.124203821656,
+        "y": 284.23121019108277
+      }
     },
     {
       "id": "output",
@@ -805,8 +1190,8 @@
     {
       "id": "reactflow__edge-agent_0-l4sshfc",
       "source": "agent_0",
-      "sourceHandle": null,
       "target": "l4sshfc",
+      "sourceHandle": null,
       "targetHandle": null,
       "style": {
         "strokeWidth": 3
@@ -825,8 +1210,8 @@
     {
       "id": "reactflow__edge-l4sshfc-vzke7q4",
       "source": "l4sshfc",
-      "sourceHandle": null,
       "target": "vzke7q4",
+      "sourceHandle": null,
       "targetHandle": null,
       "style": {
         "strokeWidth": 3
@@ -845,8 +1230,8 @@
     {
       "id": "reactflow__edge-vzke7q4-352lwjp",
       "source": "vzke7q4",
-      "sourceHandle": null,
       "target": "352lwjp",
+      "sourceHandle": null,
       "targetHandle": null,
       "style": {
         "strokeWidth": 3
@@ -865,8 +1250,8 @@
     {
       "id": "reactflow__edge-352lwjp-al94c4t",
       "source": "352lwjp",
-      "sourceHandle": null,
       "target": "al94c4t",
+      "sourceHandle": null,
       "targetHandle": null,
       "style": {
         "strokeWidth": 3
@@ -885,8 +1270,8 @@
     {
       "id": "reactflow__edge-al94c4t-jdcoa2j",
       "source": "al94c4t",
-      "sourceHandle": null,
       "target": "jdcoa2j",
+      "sourceHandle": null,
       "targetHandle": null,
       "style": {
         "strokeWidth": 3
@@ -905,8 +1290,8 @@
     {
       "id": "reactflow__edge-jdcoa2j-output",
       "source": "jdcoa2j",
-      "sourceHandle": null,
       "target": "output",
+      "sourceHandle": null,
       "targetHandle": null,
       "style": {
         "strokeWidth": 3
@@ -917,129 +1302,22 @@
       }
     }
   ],
-  "variables": {
-    "flow": [],
-    "system": [
-      {
-        "name": "userQuery",
-        "type": "string",
-        "defaultValue": ""
-      },
-      {
-        "name": "attachments",
-        "type": "array",
-        "defaultValue": []
-      },
-      {
-        "name": "sessionId",
-        "type": "string",
-        "defaultValue": ""
-      },
-      {
-        "name": "buyerId",
-        "type": "string",
-        "defaultValue": "BUYER-001"
-      },
-      {
-        "name": "procurementIntent",
-        "type": "object",
-        "defaultValue": {}
-      },
-      {
-        "name": "executionPlan",
-        "type": "object",
-        "defaultValue": {}
-      },
-      {
-        "name": "executionResults",
-        "type": "object",
-        "defaultValue": {}
-      },
-      {
-        "name": "cartId",
-        "type": "string",
-        "defaultValue": ""
-      },
-      {
-        "name": "cartFlipEvent",
-        "type": "object",
-        "defaultValue": {}
-      },
-      {
-        "name": "validationReport",
-        "type": "object",
-        "defaultValue": {}
-      },
-      {
-        "name": "domainEvent",
-        "type": "object",
-        "defaultValue": {}
-      },
-      {
-        "name": "files",
-        "type": "array",
-        "defaultValue": []
-      }
-    ]
-  },
-  "interface": {
-    "inputs": {
-      "message": {
-        "type": "string",
-        "description": "Buyer's natural language purchase request",
-        "required": true
-      },
-      "attachments": {
-        "type": "array",
-        "description": "Optional file attachments",
-        "required": false
-      }
-    },
-    "outputs": {
-      "messages": {
-        "type": "string",
-        "description": "Full conversation thread"
-      },
-      "domain_event": {
-        "type": "object",
-        "description": "CartFlipped or CatalogSearchCompleted event for downstream agents"
-      },
-      "cart_id": {
-        "type": "string",
-        "description": "Cart ID if cart was created"
-      },
-      "cart_flip_event": {
-        "type": "object",
-        "description": "CartFlipped event payload with all line items"
-      },
-      "validation_report": {
-        "type": "object",
-        "description": "Validation checks and results"
-      }
-    }
-  },
-  "skills": [],
-  "publishChannels": [
-    {
-      "refId": "api",
-      "code": "api",
-      "name": "API",
-      "description": "Expose the Catalog Agent as a REST API"
-    },
-    {
-      "refId": "qi-ui",
-      "code": "qi-ui",
-      "name": "Qi UI",
-      "description": "Make the Catalog Agent available in GEP Qi interface"
-    }
-  ],
-  "security": {
-    "activities": [
-      {
-        "refId": "755000001",
-        "code": "755000001",
-        "name": "Home"
-      }
-    ]
-  }
+  "originalBpc": "20210511",
+  "originalEnvironment": "DEV",
+  "freezeRelease": false,
+  "overwriteOnNextRelease": false,
+  "fromModuleVersion": "v1784118576680514000",
+  "lastModifiedVersion": "v1784119252431123800",
+  "rebasedFromVersion": null,
+  "createdBy": "Penubala.Deeraj@gep.com",
+  "createdOn": "2026-07-15T07:22:35.607Z",
+  "updatedBy": "Penubala.Deeraj@gep.com",
+  "updatedOn": "2026-07-15T12:29:18.833Z",
+  "bpc": "20210511",
+  "environment": "DEV",
+  "appId": "c072458a-b993-48ab-8da9-2a1db8d1a30e",
+  "moduleId": "0ef03838-70ed-4586-a3ef-39dc1703d7db",
+  "version": "v1784119252431123800",
+  "bpcCode": "20210511",
+  "compliance": {}
 }
