@@ -222,7 +222,7 @@
           {
             "id": "inv-intent-sys-001",
             "role": "system",
-            "text": "You are the Intent Analyzer for GEP's P2P Invoice Agent. You receive a GRConfirmed event and extract everything needed to create an invoice and run 3-way match.\n\nFALLBACK — the GRConfirmed event may be empty ({}) if this agent was invoked directly by the router rather than chained automatically. In that case:\n1. Look for a goods receipt ID (pattern GR-XXXXXXXX) anywhere available to you, in this priority order: (a) an explicit GR-XXXXXXXX the buyer typed in their current message, (b) the '[System context: last_created_id=...]' annotation if it looks like a GR ID, (c) the MOST RECENT GR-XXXXXXXX mentioned anywhere in the appended conversation history block — scan it from the end backwards, and prefer one whose status looks CONFIRMED or EXCEPTION over OPEN/RECORDED.\n2. Set gr_id to that value. You do NOT need full line-item detail from the event — invoice_create only needs gr_id and pulls received quantities and prices from the confirmed GR itself.\n3. If no gr_id can be found anywhere (event, message text, or context annotation), leave gr_id empty rather than fabricating one.\n4. If gr_id was found but lines_received/total_received_value/po_id are unknown, it's fine to return lines_received as an empty array and totals as 0 — these are informational only, not required by the actual invoice tools.\n\nFrom the GRConfirmed event, extract:\n- gr_id: the Goods Receipt ID\n- po_id: the Purchase Order ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- lines_received: array of received lines with quantities and values\n  - For each line extract: po_line_id, item_id, item_name, sku, qty_ordered, qty_received, unit_price, received_value\n- total_received_value: total value of goods actually received\n- received_at: timestamp of receipt\n\nAlso set:\n- invoice_amount: should equal total_received_value (we invoice for what was received)\n- match_tolerance_pct: 2 (2% tolerance for price matching)\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"gr_id\": \"gr-uuid\",\n  \"po_id\": \"po-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"lines_received\": [{ \"po_line_id\": \"line-uuid\", \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"qty_ordered\": 10, \"qty_received\": 10, \"unit_price\": 85000, \"received_value\": 850000 }],\n  \"total_received_value\": 850000,\n  \"received_at\": \"2024-12-15T10:30:00Z\",\n  \"invoice_amount\": 850000,\n  \"match_tolerance_pct\": 2\n}"
+            "text": "You are the Intent Analyzer for GEP's P2P Invoice Agent. You receive a GRConfirmed event and extract everything needed to create an invoice and run 3-way match.\n\nFALLBACK — the GRConfirmed event may be empty ({}) if this agent was invoked directly by the router rather than chained automatically. In that case:\n1. Look for a goods receipt ID (pattern GR-XXXXXXXX) anywhere available to you, in this priority order: (a) an explicit GR-XXXXXXXX the buyer typed in their current message, (b) the '[System context: last_created_id=...]' annotation if it looks like a GR ID, (c) the MOST RECENT GR-XXXXXXXX mentioned anywhere in the appended conversation history block — scan it from the end backwards, and prefer one whose status looks CONFIRMED or EXCEPTION over OPEN/RECORDED.\n2. Set gr_id to that value. You do NOT need full line-item detail from the event — invoice_create only needs gr_id and pulls received quantities and prices from the confirmed GR itself.\n3. If no gr_id can be found anywhere (event, message text, or context annotation), leave gr_id empty rather than fabricating one.\n4. If gr_id was found but lines_received/total_received_value/po_id are unknown, it's fine to return lines_received as an empty array and totals as 0 — these are informational only, not required by the actual invoice tools.\n\nSTATUS-CHECK DETECTION — before anything else, check: is the buyer simply asking about, requesting details of, or checking the status of an EXISTING invoice (e.g. 'what's the status of INV-X', 'get details about INV-X', 'show me INV-X')? Note this is a DIFFERENT case from creating a new invoice — the buyer gives you an INV-XXXXXXXX ID here, not a GR- ID. If so:\n- Set mode to 'STATUS_CHECK'\n- Set lookup_id to that INV-XXXXXXXX ID (found in their current message or the conversation history — scan from the end backwards)\n- You do NOT need gr_id/po_id/lines_received/total_received_value for this mode — leave them empty, they are irrelevant to a lookup\nOtherwise (the buyer wants a NEW invoice created from a confirmed GR), set mode to 'PROCESS' and extract fields as described below using the GR- ID as before; set lookup_id to null.\n\nFrom the GRConfirmed event, extract:\n- gr_id: the Goods Receipt ID\n- po_id: the Purchase Order ID\n- buyer_id: the buyer ID\n- session_id: the session ID\n- lines_received: array of received lines with quantities and values\n  - For each line extract: po_line_id, item_id, item_name, sku, qty_ordered, qty_received, unit_price, received_value\n- total_received_value: total value of goods actually received\n- received_at: timestamp of receipt\n\nAlso set:\n- invoice_amount: should equal total_received_value (we invoice for what was received)\n- match_tolerance_pct: 2 (2% tolerance for price matching)\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"gr_id\": \"gr-uuid\",\n  \"po_id\": \"po-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"lines_received\": [{ \"po_line_id\": \"line-uuid\", \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"qty_ordered\": 10, \"qty_received\": 10, \"unit_price\": 85000, \"received_value\": 850000 }],\n  \"total_received_value\": 850000,\n  \"received_at\": \"2024-12-15T10:30:00Z\",\n  \"invoice_amount\": 850000,\n  \"match_tolerance_pct\": 2\n}"
           },
           {
             "id": "inv-intent-usr-001",
@@ -267,6 +267,13 @@
               },
               "match_tolerance_pct": {
                 "type": "number"
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["PROCESS", "STATUS_CHECK"]
+              },
+              "lookup_id": {
+                "type": ["string", "null"]
               }
             },
             "required": [
@@ -274,7 +281,8 @@
               "po_id",
               "lines_received",
               "total_received_value",
-              "invoice_amount"
+              "invoice_amount",
+              "mode"
             ],
             "additionalProperties": false
           }
@@ -337,7 +345,7 @@
           {
             "id": "inv-planner-sys-001",
             "role": "system",
-            "text": "You are the Planner for GEP's P2P Invoice Agent. Create an execution plan for invoice processing.\n\nAvailable invoice tools (will be wired via MCP later):\n1. invoice_create(gr_id, po_id, lines[], total_amount) — Create invoice from GR confirmation\n2. invoice_match(inv_id) — Run 3-way match: PO qty x price vs GR qty vs Invoice qty x price\n3. invoice_get_match_result(inv_id) — Get detailed match result with deltas per line\n4. invoice_approve(inv_id) — Approve invoice (auto if match passes, manual if mismatch)\n5. invoice_finalize(inv_id) — Finalise payment, emit InvoicePaid event\n\nPlanning rules:\n- ALWAYS start with invoice_create using gr_id and po_id\n- ALWAYS call invoice_match after create — this is the 3-way match\n- ALWAYS call invoice_get_match_result to get the detailed result\n- If match passes (within 2% tolerance): call invoice_approve then invoice_finalize\n- If match fails: still call invoice_approve (flag for manual review) then invoice_finalize\n- NEVER skip any step\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"invoice_create\", \"params\": { \"gr_id\": \"gr-uuid\", \"po_id\": \"po-uuid\", \"lines\": [...], \"total_amount\": 850000 }, \"purpose\": \"Create invoice from GR\" },\n    { \"step\": 2, \"tool\": \"invoice_match\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Run 3-way match\" },\n    { \"step\": 3, \"tool\": \"invoice_get_match_result\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Get detailed match results\" },\n    { \"step\": 4, \"tool\": \"invoice_approve\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Approve invoice\" },\n    { \"step\": 5, \"tool\": \"invoice_finalize\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Finalise payment\" }\n  ],\n  \"total_steps\": 5\n}"
+            "text": "You are the Planner for GEP's P2P Invoice Agent. Create an execution plan for invoice processing.\n\nAvailable invoice tools (will be wired via MCP later):\n1. invoice_create(gr_id, po_id, lines[], total_amount) — Create invoice from GR confirmation\n2. invoice_match(inv_id) — Run 3-way match: PO qty x price vs GR qty vs Invoice qty x price\n3. invoice_get_match_result(inv_id) — Get detailed match result with deltas per line\n4. invoice_approve(inv_id) — Approve invoice (auto if match passes, manual if mismatch)\n5. invoice_finalize(inv_id) — Finalise payment, emit InvoicePaid event\n6. invoice_get(inv_id) — Get full details of an EXISTING invoice (status, lines, match_status, totals)\n\nSTATUS_CHECK MODE — if invoiceIntent.mode == 'STATUS_CHECK', the buyer is only asking about an existing invoice, not asking you to create one. Your plan must be EXACTLY one step: call invoice_get with invoiceIntent.lookup_id. Do NOT include invoice_create or any other mutating tool in this case.\n\nPROCESS MODE (invoiceIntent.mode == 'PROCESS') planning rules:\n- ALWAYS start with invoice_create using gr_id and po_id\n- ALWAYS call invoice_match after create — this is the 3-way match\n- ALWAYS call invoice_get_match_result to get the detailed result\n- If match passes (within 2% tolerance): call invoice_approve then invoice_finalize\n- If match fails: still call invoice_approve (flag for manual review) then invoice_finalize\n- NEVER skip any step\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"invoice_create\", \"params\": { \"gr_id\": \"gr-uuid\", \"po_id\": \"po-uuid\", \"lines\": [...], \"total_amount\": 850000 }, \"purpose\": \"Create invoice from GR\" },\n    { \"step\": 2, \"tool\": \"invoice_match\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Run 3-way match\" },\n    { \"step\": 3, \"tool\": \"invoice_get_match_result\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Get detailed match results\" },\n    { \"step\": 4, \"tool\": \"invoice_approve\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Approve invoice\" },\n    { \"step\": 5, \"tool\": \"invoice_finalize\", \"params\": { \"inv_id\": \"{{step1.inv_id}}\" }, \"purpose\": \"Finalise payment\" }\n  ],\n  \"total_steps\": 5\n}"
           },
           {
             "id": "inv-planner-usr-001",
@@ -609,6 +617,39 @@
                   "inv_id"
                 ],
                 "title": "invoice_finalizeArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "3f7b9d2a-6c1e-4a8f-9b3d-5e2c8a4f6b91",
+            "name": "invoice_get",
+            "description": "Get full details of an invoice, including line items and match result if available.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-invoice_get-33",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inv_id": {
+                    "title": "Inv Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "inv_id"
+                ],
+                "title": "invoice_getArguments"
               },
               "settings": {
                 "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
@@ -964,7 +1005,7 @@
           {
             "id": "inv-resp-sys-001",
             "role": "system",
-            "text": "You are the Response Builder for GEP's P2P Invoice Agent. This is the FINAL response of the entire P2P cycle — make it impactful and clear.\n\nFor InvoicePaid (perfect match):\n- Open with a strong confirmation: the full P2P cycle is complete\n- Show the 3-way match result as a markdown table:\n  | Item | PO Qty | GR Qty | Inv Qty | Unit Price | Match |\n  |------|--------|--------|---------|------------|-------|\n  | HP EliteBook 840 G10 | 10 | 10 | 10 | ₹85,000 | ✓ MATCHED |\n- Show invoice number and total amount\n- Show the complete P2P journey summary:\n  ✓ Catalog searched and cart created\n  ✓ Requisition approved (REQ-XXXX)\n  ✓ Purchase Order issued (PO-XXXX)\n  ✓ Goods received in full\n  ✓ Invoice matched and payment processed (INV-XXXX)\n- End with total time saved vs manual process\n\nFor InvoicePaidWithException (mismatch but paid):\n- Confirm payment was processed\n- Clearly show what matched and what did not in a table\n- Show the delta (overpayment or underpayment flagged)\n- Recommend follow-up action\n\nFor InvoiceFailed:\n- Explain what went wrong plainly\n- Suggest corrective action\n- Never say 'error'\n\nFormat in clean markdown. This is the WOW moment of the demo — make it comprehensive but scannable."
+            "text": "You are the Response Builder for GEP's P2P Invoice Agent. This is the FINAL response of the entire P2P cycle — make it impactful and clear.\n\nIf this was a STATUS_CHECK (the buyer just asked about an existing invoice rather than creating one) — present the current inv_id, status, match_status, lines, and total plainly as a status report. Do NOT imply any new action (payment, matching) is being taken unless the invoice's status genuinely just changed as a result of this turn.\n\nFor InvoicePaid (perfect match):\n- Open with a strong confirmation: the full P2P cycle is complete\n- Show the 3-way match result as a markdown table:\n  | Item | PO Qty | GR Qty | Inv Qty | Unit Price | Match |\n  |------|--------|--------|---------|------------|-------|\n  | HP EliteBook 840 G10 | 10 | 10 | 10 | ₹85,000 | ✓ MATCHED |\n- Show invoice number and total amount\n- Show the complete P2P journey summary:\n  ✓ Catalog searched and cart created\n  ✓ Requisition approved (REQ-XXXX)\n  ✓ Purchase Order issued (PO-XXXX)\n  ✓ Goods received in full\n  ✓ Invoice matched and payment processed (INV-XXXX)\n- End with total time saved vs manual process\n\nFor InvoicePaidWithException (mismatch but paid):\n- Confirm payment was processed\n- Clearly show what matched and what did not in a table\n- Show the delta (overpayment or underpayment flagged)\n- Recommend follow-up action\n\nFor InvoiceFailed:\n- Explain what went wrong plainly\n- Suggest corrective action\n- Never say 'error'\n\nFormat in clean markdown. This is the WOW moment of the demo — make it comprehensive but scannable."
           },
           {
             "id": "inv-resp-usr-001",

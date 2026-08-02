@@ -901,12 +901,28 @@ def trace_chain(id: str) -> dict:
     }
 
 
+@mcp.tool()
+def req_get(req_id: str) -> dict:
+    """Get full details of a requisition, including line items."""
+    if req_id not in REQS:
+        return {"error": f"Requisition {req_id} not found"}
+    return {"req": REQS[req_id]}
+
+
+@mcp.tool()
+def invoice_get(inv_id: str) -> dict:
+    """Get full details of an invoice, including line items and match result if available."""
+    if inv_id not in INVOICES:
+        return {"error": f"Invoice {inv_id} not found"}
+    return {"invoice": INVOICES[inv_id]}
+
+
 # ── Health check & Dashboard (for Render / load balancers, and live demo view) ─
 
 @mcp.custom_route("/mcp-health", methods=["GET"])
 async def health(request):
     from starlette.responses import JSONResponse
-    return JSONResponse({"status": "ok", "tools": 32, "service": "p2p-hackathon-mcp"})
+    return JSONResponse({"status": "ok", "tools": 34, "service": "p2p-hackathon-mcp"})
 
 
 @mcp.custom_route("/dashboard", methods=["GET"])

@@ -230,7 +230,7 @@
           {
             "id": "req-intent-sys-001",
             "role": "system",
-            "text": "You are the Intent Analyzer for GEP's P2P Requisition Agent. You receive a CartFlipped event from the Catalog Agent and extract all information needed to create and process a requisition.\n\nFALLBACK — the CartFlipped event may be empty ({}) if this agent was invoked directly by the router rather than chained automatically. In that case:\n1. Look for a cart ID (pattern CART-XXXXXXXX) anywhere available to you, in this priority order: (a) an explicit CART-XXXXXXXX the buyer typed in their current message, (b) the '[System context: last_created_id=...]' annotation if it looks like a cart ID, (c) the MOST RECENT CART-XXXXXXXX mentioned anywhere in the appended conversation history block — scan it from the end backwards since a session may have created more than one cart.\n2. Set cart_id to that value. You do NOT need the full line-item detail from the event — req_create only needs cart_id and looks up the cart's contents itself.\n3. Extract cost_center, gl_account, deliver_to, and need_by directly from the buyer's natural-language message if present (e.g. 'cost centre CC-4201, deliver to Hyderabad office by Dec 20').\n4. If no cart_id can be found anywhere (event, message text, or context annotation), leave cart_id empty and add 'cart_id' to missing_fields with can_auto_proceed set to false — do not fabricate one.\n5. If cart_id was found but lines/grand_total/buyer_id are unknown, it's fine to return lines as an empty array and grand_total as 0 — these are informational only, not required by the actual requisition tools.\n\nFrom the CartFlipped event payload, extract:\n- cart_id: the source cart ID\n- buyer_id: the buyer's ID\n- session_id: the session ID\n- lines: array of line items (item_id, item_name, sku, quantity, unit_price, line_total, supplier_id)\n- grand_total: total value of the requisition\n- cost_center: accounting cost centre (e.g. CC-4201) — required for submission\n- gl_account: GL account code (e.g. GL-5501-IT) — required for submission\n- deliver_to: delivery address — required for submission\n- need_by: required delivery date — required for submission\n\nAlso determine:\n- missing_fields: list of required fields that are null or missing (cost_center, gl_account, deliver_to, need_by)\n- can_auto_proceed: true if all required fields are present, false if any are missing\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"cart_id\": \"cart-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"lines\": [\n    { \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"quantity\": 10, \"unit_price\": 85000, \"line_total\": 850000, \"supplier_id\": \"SUP-001\" }\n  ],\n  \"grand_total\": 850000,\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\",\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"missing_fields\": [],\n  \"can_auto_proceed\": true\n}"
+            "text": "You are the Intent Analyzer for GEP's P2P Requisition Agent. You receive a CartFlipped event from the Catalog Agent and extract all information needed to create and process a requisition.\n\nFALLBACK — the CartFlipped event may be empty ({}) if this agent was invoked directly by the router rather than chained automatically. In that case:\n1. Look for a cart ID (pattern CART-XXXXXXXX) anywhere available to you, in this priority order: (a) an explicit CART-XXXXXXXX the buyer typed in their current message, (b) the '[System context: last_created_id=...]' annotation if it looks like a cart ID, (c) the MOST RECENT CART-XXXXXXXX mentioned anywhere in the appended conversation history block — scan it from the end backwards since a session may have created more than one cart.\n2. Set cart_id to that value. You do NOT need the full line-item detail from the event — req_create only needs cart_id and looks up the cart's contents itself.\n3. Extract cost_center, gl_account, deliver_to, and need_by directly from the buyer's natural-language message if present (e.g. 'cost centre CC-4201, deliver to Hyderabad office by Dec 20').\n4. If no cart_id can be found anywhere (event, message text, or context annotation), leave cart_id empty and add 'cart_id' to missing_fields with can_auto_proceed set to false — do not fabricate one.\n5. If cart_id was found but lines/grand_total/buyer_id are unknown, it's fine to return lines as an empty array and grand_total as 0 — these are informational only, not required by the actual requisition tools.\n\nSTATUS-CHECK DETECTION — before anything else, check: is the buyer simply asking about, requesting details of, or checking the status of an EXISTING requisition (e.g. 'what's the status of REQ-X', 'get details about REQ-X', 'show me REQ-X')? If so:\n- Set mode to 'STATUS_CHECK'\n- Set lookup_id to that REQ-XXXXXXXX ID (found in their current message or the conversation history — scan from the end backwards)\n- You do NOT need cost_center/gl_account/deliver_to/need_by/lines for this mode — leave them null/empty, they are irrelevant to a lookup\nOtherwise (the buyer wants a NEW requisition created from a flipped cart), set mode to 'PROCESS' and extract fields as described below; set lookup_id to null.\n\nFrom the CartFlipped event payload, extract:\n- cart_id: the source cart ID\n- buyer_id: the buyer's ID\n- session_id: the session ID\n- lines: array of line items (item_id, item_name, sku, quantity, unit_price, line_total, supplier_id)\n- grand_total: total value of the requisition\n- cost_center: accounting cost centre (e.g. CC-4201) — required for submission\n- gl_account: GL account code (e.g. GL-5501-IT) — required for submission\n- deliver_to: delivery address — required for submission\n- need_by: required delivery date — required for submission\n\nAlso determine:\n- missing_fields: list of required fields that are null or missing (cost_center, gl_account, deliver_to, need_by)\n- can_auto_proceed: true if all required fields are present, false if any are missing\n\nRespond ONLY with a valid JSON object. No preamble.\n\nExample output:\n{\n  \"cart_id\": \"cart-uuid\",\n  \"buyer_id\": \"BUYER-001\",\n  \"session_id\": \"session-uuid\",\n  \"lines\": [\n    { \"item_id\": \"item-uuid\", \"item_name\": \"HP EliteBook 840 G10\", \"sku\": \"LAP-001\", \"quantity\": 10, \"unit_price\": 85000, \"line_total\": 850000, \"supplier_id\": \"SUP-001\" }\n  ],\n  \"grand_total\": 850000,\n  \"cost_center\": \"CC-4201\",\n  \"gl_account\": \"GL-5501-IT\",\n  \"deliver_to\": \"Hyderabad Office Floor 3\",\n  \"need_by\": \"2024-12-20\",\n  \"missing_fields\": [],\n  \"can_auto_proceed\": true\n}"
           },
           {
             "id": "req-intent-usr-001",
@@ -293,6 +293,13 @@
               },
               "can_auto_proceed": {
                 "type": "boolean"
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["PROCESS", "STATUS_CHECK"]
+              },
+              "lookup_id": {
+                "type": ["string", "null"]
               }
             },
             "required": [
@@ -301,7 +308,8 @@
               "lines",
               "grand_total",
               "missing_fields",
-              "can_auto_proceed"
+              "can_auto_proceed",
+              "mode"
             ],
             "additionalProperties": false
           }
@@ -364,7 +372,7 @@
           {
             "id": "req-planner-sys-001",
             "role": "system",
-            "text": "You are the Planner for GEP's P2P Requisition Agent. Your job is to create an ordered execution plan for processing a requisition based on the extracted intent.\n\nAvailable requisition tools (will be wired via MCP later):\n1. req_create(cart_id, buyer_id, lines[], grand_total) — Create requisition from cart\n2. req_set_accounting(req_id, cost_center, gl_account) — Attach accounting codes\n3. req_set_delivery(req_id, deliver_to, need_by) — Attach delivery details\n4. req_submit(req_id) — Submit requisition for approval\n5. req_get_status(req_id) — Poll approval status\n6. req_approve(req_id) — Approve requisition (auto-approve in demo mode)\n\nPlanning rules:\n- ALWAYS start with req_create\n- ALWAYS call req_set_accounting after create — cost_center and gl_account are mandatory\n- ALWAYS call req_set_delivery after accounting — deliver_to and need_by are mandatory\n- ALWAYS call req_submit after delivery is set\n- ALWAYS call req_get_status after submit to confirm it entered approval\n- ALWAYS call req_approve last (demo auto-approves)\n- If missing_fields is not empty: plan must include a clarification step BEFORE req_create\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"req_create\", \"params\": { \"cart_id\": \"{{reqIntent.cart_id}}\", \"buyer_id\": \"{{reqIntent.buyer_id}}\", \"lines\": \"{{reqIntent.lines}}\", \"grand_total\": \"{{reqIntent.grand_total}}\" }, \"purpose\": \"Create requisition from cart\" },\n    { \"step\": 2, \"tool\": \"req_set_accounting\", \"params\": { \"req_id\": \"{{step1.req_id}}\", \"cost_center\": \"CC-4201\", \"gl_account\": \"GL-5501-IT\" }, \"purpose\": \"Attach accounting codes\" },\n    { \"step\": 3, \"tool\": \"req_set_delivery\", \"params\": { \"req_id\": \"{{step1.req_id}}\", \"deliver_to\": \"Hyderabad Office\", \"need_by\": \"2024-12-20\" }, \"purpose\": \"Set delivery details\" },\n    { \"step\": 4, \"tool\": \"req_submit\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Submit for approval\" },\n    { \"step\": 5, \"tool\": \"req_get_status\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Confirm approval status\" },\n    { \"step\": 6, \"tool\": \"req_approve\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Auto-approve requisition\" }\n  ],\n  \"total_steps\": 6,\n  \"needs_clarification\": false,\n  \"missing_fields\": []\n}"
+            "text": "You are the Planner for GEP's P2P Requisition Agent. Your job is to create an ordered execution plan for processing a requisition based on the extracted intent.\n\nAvailable requisition tools (will be wired via MCP later):\n1. req_create(cart_id, buyer_id, lines[], grand_total) — Create requisition from cart\n2. req_set_accounting(req_id, cost_center, gl_account) — Attach accounting codes\n3. req_set_delivery(req_id, deliver_to, need_by) — Attach delivery details\n4. req_submit(req_id) — Submit requisition for approval\n5. req_get_status(req_id) — Poll approval status\n6. req_approve(req_id) — Approve requisition (auto-approve in demo mode)\n7. req_get(req_id) — Get full details of an EXISTING requisition (id, status, accounting, delivery, lines, totals)\n\nSTATUS_CHECK MODE — if reqIntent.mode == 'STATUS_CHECK', the buyer is only asking about an existing requisition, not asking you to create one. Your plan must be EXACTLY one step: call req_get with reqIntent.lookup_id. Do NOT include req_create or any other mutating tool in this case.\n\nPROCESS MODE (reqIntent.mode == 'PROCESS') planning rules:\n- ALWAYS start with req_create\n- ALWAYS call req_set_accounting after create — cost_center and gl_account are mandatory\n- ALWAYS call req_set_delivery after accounting — deliver_to and need_by are mandatory\n- ALWAYS call req_submit after delivery is set\n- ALWAYS call req_get_status after submit to confirm it entered approval\n- ALWAYS call req_approve last (demo auto-approves)\n- If missing_fields is not empty: plan must include a clarification step BEFORE req_create\n\nRespond ONLY with a valid JSON object.\n\nExample output:\n{\n  \"execution_plan\": [\n    { \"step\": 1, \"tool\": \"req_create\", \"params\": { \"cart_id\": \"{{reqIntent.cart_id}}\", \"buyer_id\": \"{{reqIntent.buyer_id}}\", \"lines\": \"{{reqIntent.lines}}\", \"grand_total\": \"{{reqIntent.grand_total}}\" }, \"purpose\": \"Create requisition from cart\" },\n    { \"step\": 2, \"tool\": \"req_set_accounting\", \"params\": { \"req_id\": \"{{step1.req_id}}\", \"cost_center\": \"CC-4201\", \"gl_account\": \"GL-5501-IT\" }, \"purpose\": \"Attach accounting codes\" },\n    { \"step\": 3, \"tool\": \"req_set_delivery\", \"params\": { \"req_id\": \"{{step1.req_id}}\", \"deliver_to\": \"Hyderabad Office\", \"need_by\": \"2024-12-20\" }, \"purpose\": \"Set delivery details\" },\n    { \"step\": 4, \"tool\": \"req_submit\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Submit for approval\" },\n    { \"step\": 5, \"tool\": \"req_get_status\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Confirm approval status\" },\n    { \"step\": 6, \"tool\": \"req_approve\", \"params\": { \"req_id\": \"{{step1.req_id}}\" }, \"purpose\": \"Auto-approve requisition\" }\n  ],\n  \"total_steps\": 6,\n  \"needs_clarification\": false,\n  \"missing_fields\": []\n}"
           },
           {
             "id": "req-planner-usr-001",
@@ -700,6 +708,39 @@
                   "req_id"
                 ],
                 "title": "req_approveArguments"
+              },
+              "settings": {
+                "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
+                "serverName": "hackthon"
+              },
+              "returnDirect": false,
+              "_meta": {
+                "source": "mcp-server",
+                "serverName": "hackthon"
+              }
+            }
+          },
+          {
+            "_id": "8a2f4c1e-3b5d-4e9a-8c7f-2d6e9a1b4f80",
+            "name": "req_get",
+            "description": "Get full details of a requisition, including line items.",
+            "type": "tool",
+            "config": {
+              "enabled": true,
+              "toolId": "f5a6cb74-e187-4781-a305-778fffb2d91f-req_get-32",
+              "type": "mcp",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "req_id": {
+                    "title": "Req Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "req_id"
+                ],
+                "title": "req_getArguments"
               },
               "settings": {
                 "serverId": "f5a6cb74-e187-4781-a305-778fffb2d91f",
@@ -1054,7 +1095,7 @@
           {
             "id": "req-resp-sys-001",
             "role": "system",
-            "text": "You are the Response Builder for GEP's P2P Requisition Agent. Write a clear, buyer-friendly response about the requisition status.\n\nFor ReqApproved:\n- Confirm requisition was created and approved\n- Show req_id for reference\n- Show a markdown table: Item | Qty | Unit Price | Line Total\n- Show grand total\n- Show cost centre and GL account attached\n- Show delivery address and need-by date\n- Confirm what happens next: Purchase Order will now be created automatically\n\nFor ReqPendingApproval:\n- Confirm req was submitted successfully\n- Show req_id\n- Explain it is awaiting manual approval\n- Tell them they will be notified when approved\n\nFor ReqFailed:\n- Explain clearly what went wrong in plain language\n- Suggest corrective action\n- Never say 'error' — say 'could not be created' or 'something went wrong'\n\nFormat in clean markdown. Keep under 250 words."
+            "text": "You are the Response Builder for GEP's P2P Requisition Agent. Write a clear, buyer-friendly response about the requisition status.\n\nIf this was a STATUS_CHECK (the buyer just asked about an existing requisition rather than creating one) — present the current req_id, status, cost centre, GL account, delivery details, lines, and total plainly as a status report. Do NOT say it was 'just created' or imply any new action is being taken (e.g. do not say a PO will now be created) unless the requisition's status genuinely just changed as a result of this turn.\n\nFor ReqApproved:\n- Confirm requisition was created and approved\n- Show req_id for reference\n- Show a markdown table: Item | Qty | Unit Price | Line Total\n- Show grand total\n- Show cost centre and GL account attached\n- Show delivery address and need-by date\n- Confirm what happens next: Purchase Order will now be created automatically\n\nFor ReqPendingApproval:\n- Confirm req was submitted successfully\n- Show req_id\n- Explain it is awaiting manual approval\n- Tell them they will be notified when approved\n\nFor ReqFailed:\n- Explain clearly what went wrong in plain language\n- Suggest corrective action\n- Never say 'error' — say 'could not be created' or 'something went wrong'\n\nFormat in clean markdown. Keep under 250 words."
           },
           {
             "id": "req-resp-usr-001",

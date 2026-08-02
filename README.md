@@ -20,7 +20,7 @@ live demo from Render's free-tier ~15 min idle spin-down wiping in-memory state
 between the pitch and the walkthrough. Call `demo_reset` to clear it for a clean
 re-run.
 
-## Tools (32 total)
+## Tools (34 total)
 
 ### Catalog Agent
 | Tool | Description |
@@ -40,6 +40,7 @@ re-run.
 | `req_set_delivery` | Set deliver_to + need_by date |
 | `req_submit` | Submit for approval → status: PENDING_APPROVAL. Computes an `approval_tier` (AUTO ≤$2k / MANAGER ≤$20k / DIRECTOR >$20k) from spend |
 | `req_get_status` | Poll status |
+| `req_get` | Get full details of a requisition (status, accounting, delivery, lines) — used for status-check lookups |
 | `req_approve` | Approve → status: APPROVED. DIRECTOR-tier reqs approved without an `approver_note` come back with `audit_flag: true` |
 
 ### Order Agent
@@ -64,6 +65,7 @@ re-run.
 | `invoice_create` | Create invoice from confirmed GR → returns `inv_id`. Blocks duplicate invoicing against the same PO |
 | `invoice_match` | Run 3-way match (PO vs GR vs Invoice, 2% tolerance) |
 | `invoice_get_match_result` | Get per-line match deltas |
+| `invoice_get` | Get full details of an invoice regardless of match status — used for status-check lookups |
 | `invoice_approve` | Approve invoice |
 | `invoice_finalize` | Finalise → emits InvoicePaid event, P2P cycle COMPLETE |
 
@@ -180,3 +182,40 @@ feature to judges:
 - `req_agent.json` has a parallel `ReqPendingApproval` event shape scaffolded,
   but nothing in `server.py` can currently trigger it (`req_approve` never
   fails) — it's unreachable dead code unless real gating is added later.
+
+## Two more bugs found via the live dashboard
+
+### Cart duplication
+
+CatalogAgent was the *only* one of the five domain agents whose message input
+from `main_agent.json` wasn't enriched with `{{thread.messages}}` (it was
+treated as "the entry point, no continuity needed" — wrong, since it's
+re-invoked on every cart-related turn, not just the first). Its own Planner
+had no way to know a cart already existed, so it called `cart_create` fresh
+on every `ADD_TO_CART`/`FULL_PURCHASE` turn — visibly confirmed on the
+dashboard as two carts with identical contents a few minutes apart, one
+`OPEN` and one `FLIPPED`. Fixed by enriching `main_agent.json`'s message input
+to `catalogagent` the same way as the other four agents, and adding
+`existing_cart_id` detection to CatalogAgent's Intent Analyzer/Planner/Tool
+Executer so an open cart from earlier in the session is reused instead of
+recreated.
+
+### Agents could only create records, never look them up
+
+Asking OrderAgent *"Get the details about PO-014E793A"* in a fresh session —
+even with the PO ID right there in the message — failed with `req_id missing
+from order intent`, `steps_completed: 0`, `no po_id generated`, even though
+the dashboard proved that PO genuinely existed and was `ISSUED`. Root cause:
+unlike CatalogAgent (which has `SEARCH_ONLY`/`ADD_TO_CART`/`FULL_PURCHASE`
+branching), the Requisition/Order/GR/Invoice Planners were hardcoded to
+*always* build a create-and-process pipeline, with no path for "the buyer is
+just asking about an existing record." Fixed by adding a `mode`
+(`PROCESS`/`STATUS_CHECK`) + `lookup_id` field to each of those four agents'
+Intent Analyzer, and a Planner branch that builds a single-step read-only plan
+(`req_get`/`order_get`/`gr_get`/`invoice_get`) when `mode == STATUS_CHECK`,
+instead of the full create pipeline. `req_get` and `invoice_get` are new
+tools added to `server.py` (the other two already existed) — deliberately
+appended at the *end* of the tool list rather than inserted alongside their
+siblings, since FastMCP's tool `toolId`s are order-dependent and every other
+agent's already-working tool bindings depend on the existing tools keeping
+their original position.

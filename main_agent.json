@@ -440,7 +440,7 @@
           "name": "P2PHacathonAgent BaseModule"
         },
         "inputs": {
-          "message": "{{system.userQuery}}"
+          "message": "{{system.userQuery}}\n\n[System context: last_created_id={{flow.lastId}}]\n\n[Conversation history — scan for an existing OPEN or FLIPPED cart for this session before creating a new one]:\n{{thread.messages}}"
         },
         "agenticWorkflowIdMode": "static",
         "agenticWorkflowId": "6bb4f720-5634-4b79-b3dd-db89e211463a",
