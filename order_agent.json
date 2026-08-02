@@ -225,7 +225,7 @@
           {
             "id": "ord-intent-usr-001",
             "role": "user",
-            "text": "ReqApproved event received:\n{{system.reqApprovedEvent}}\n\nExtract all order fields and return the JSON."
+            "text": "ReqApproved event received:\n{{system.reqApprovedEvent}}\n\nBuyer message (use this if the event above is empty — it may contain an explicit req_id or the conversation history needed to recover it):\n{{system.userQuery}}\n\nExtract all order fields and return the JSON."
           }
         ],
         "tools": [],

@@ -235,7 +235,7 @@
           {
             "id": "req-intent-usr-001",
             "role": "user",
-            "text": "CartFlipped event received:\n{{system.cartFlipEvent}}\n\nExtract all requisition fields and return the JSON."
+            "text": "CartFlipped event received:\n{{system.cartFlipEvent}}\n\nBuyer message (use this if the event above is empty — it may contain an explicit cart_id, cost_center, gl_account, deliver_to, need_by, or the conversation history needed to recover them):\n{{system.userQuery}}\n\nExtract all requisition fields and return the JSON."
           }
         ],
         "tools": [],

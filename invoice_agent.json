@@ -227,7 +227,7 @@
           {
             "id": "inv-intent-usr-001",
             "role": "user",
-            "text": "GRConfirmed event received:\n{{system.grConfirmedEvent}}\n\nExtract all invoice fields and return the JSON."
+            "text": "GRConfirmed event received:\n{{system.grConfirmedEvent}}\n\nBuyer message (use this if the event above is empty — it may contain an explicit gr_id or the conversation history needed to recover it):\n{{system.userQuery}}\n\nExtract all invoice fields and return the JSON."
           }
         ],
         "tools": [],
