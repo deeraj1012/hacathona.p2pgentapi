@@ -5,7 +5,7 @@ Covers: Catalog, Requisition, Order, Goods Receipt, Invoice agents.
 
 from mcp.server.fastmcp import FastMCP
 from datetime import datetime, timezone
-import uuid, random, json, os
+import uuid, random, json, os, html
 
 mcp = FastMCP("p2p-hackathon")
 
@@ -60,6 +60,124 @@ def _now() -> str:
 
 def _id(prefix: str) -> str:
     return f"{prefix}-{str(uuid.uuid4())[:8].upper()}"
+
+# ── Observability helpers ──────────────────────────────────────────────────────
+
+_PREFIX_MAP = {"CART": "cart", "REQ": "req", "PO": "po", "GR": "gr", "INV": "inv"}
+
+def _detect_entity_type(entity_id: str):
+    prefix = entity_id.split("-")[0] if "-" in entity_id else entity_id
+    return _PREFIX_MAP.get(prefix)
+
+
+_STATUS_CLASS = {
+    "OPEN": "muted", "DRAFT": "muted", "RECORDED": "muted",
+    "PENDING_APPROVAL": "warn",
+    "APPROVED": "ok", "ISSUED": "ok", "MATCHED": "ok", "CONFIRMED": "ok", "PAID": "ok", "FLIPPED": "ok",
+    "EXCEPTION": "bad", "MISMATCH": "bad",
+}
+
+def _status_badge(status) -> str:
+    status = status or "UNKNOWN"
+    cls = _STATUS_CLASS.get(status, "muted")
+    return f'<span class="status {cls}">{html.escape(str(status))}</span>'
+
+
+def _e(value) -> str:
+    """Escape a value for HTML interpolation, tolerating None/non-strings."""
+    return html.escape(str(value)) if value is not None else ""
+
+
+def _dashboard_data() -> dict:
+    return {
+        "carts": list(CARTS.values()),
+        "reqs": list(REQS.values()),
+        "orders": list(ORDERS.values()),
+        "grs": list(GRS.values()),
+        "invoices": list(INVOICES.values()),
+    }
+
+
+def _cart_row(c: dict) -> str:
+    total = sum(l["line_total"] for l in c.get("lines", []))
+    return (f"<tr><td>{_e(c.get('cart_id'))}</td><td>{_status_badge(c.get('status'))}</td>"
+            f"<td>{len(c.get('lines', []))}</td><td>{total:,.2f}</td><td>{_e(c.get('created_at'))}</td></tr>")
+
+
+def _req_row(r: dict) -> str:
+    return (f"<tr><td>{_e(r.get('req_id'))}</td><td>{_e(r.get('cart_id'))}</td>"
+            f"<td>{_status_badge(r.get('status'))}</td><td>{_e(r.get('approval_tier'))}</td>"
+            f"<td>{(r.get('grand_total') or 0):,.2f}</td></tr>")
+
+
+def _order_row(o: dict) -> str:
+    return (f"<tr><td>{_e(o.get('po_id'))}</td><td>{_e(o.get('req_id'))}</td>"
+            f"<td>{_e(o.get('supplier_id'))}</td><td>{_status_badge(o.get('status'))}</td>"
+            f"<td>{(o.get('grand_total') or 0):,.2f}</td></tr>")
+
+
+def _gr_row(g: dict) -> str:
+    value = g.get("total_received_value")
+    value_str = f"{value:,.2f}" if value is not None else "—"
+    return (f"<tr><td>{_e(g.get('gr_id'))}</td><td>{_e(g.get('po_id'))}</td>"
+            f"<td>{_status_badge(g.get('status'))}</td><td>{value_str}</td></tr>")
+
+
+def _invoice_row(i: dict) -> str:
+    return (f"<tr><td>{_e(i.get('inv_number'))}</td><td>{_e(i.get('po_id'))}</td>"
+            f"<td>{_e(i.get('gr_id'))}</td><td>{_status_badge(i.get('status'))}</td>"
+            f"<td>{_status_badge(i.get('match_status'))}</td><td>{(i.get('inv_total') or 0):,.2f}</td></tr>")
+
+
+def _render_dashboard_html() -> str:
+    data = _dashboard_data()
+    carts = sorted(data["carts"], key=lambda x: x.get("created_at") or "", reverse=True)
+    reqs = sorted(data["reqs"], key=lambda x: x.get("created_at") or "", reverse=True)
+    orders = sorted(data["orders"], key=lambda x: x.get("created_at") or "", reverse=True)
+    grs = sorted(data["grs"], key=lambda x: x.get("created_at") or "", reverse=True)
+    invoices = sorted(data["invoices"], key=lambda x: x.get("created_at") or "", reverse=True)
+
+    cart_rows = "".join(_cart_row(c) for c in carts) or "<tr><td colspan='5' class='empty'>No carts yet</td></tr>"
+    req_rows = "".join(_req_row(r) for r in reqs) or "<tr><td colspan='5' class='empty'>No requisitions yet</td></tr>"
+    order_rows = "".join(_order_row(o) for o in orders) or "<tr><td colspan='5' class='empty'>No purchase orders yet</td></tr>"
+    gr_rows = "".join(_gr_row(g) for g in grs) or "<tr><td colspan='4' class='empty'>No goods receipts yet</td></tr>"
+    invoice_rows = "".join(_invoice_row(i) for i in invoices) or "<tr><td colspan='6' class='empty'>No invoices yet</td></tr>"
+
+    return f"""<!DOCTYPE html>
+<html><head>
+<meta http-equiv="refresh" content="5">
+<meta charset="utf-8">
+<title>P2P Live Dashboard</title>
+<style>
+  body {{ font-family: -apple-system, Segoe UI, Arial, sans-serif; background:#0f1115; color:#e6e6e6; margin:0; padding:24px; }}
+  h1 {{ font-size:20px; margin-bottom:4px; }}
+  h2 {{ font-size:15px; color:#9aa0a6; margin-top:32px; border-bottom:1px solid #2a2d33; padding-bottom:6px; }}
+  table {{ width:100%; border-collapse:collapse; font-size:13px; margin-top:8px; }}
+  th {{ text-align:left; color:#9aa0a6; padding:6px 10px; font-weight:500; }}
+  td {{ padding:6px 10px; border-top:1px solid #23262b; }}
+  .status {{ padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }}
+  .status.muted {{ background:#2d3748; color:#a0aec0; }}
+  .status.warn {{ background:#5a4a12; color:#f6c343; }}
+  .status.ok {{ background:#14532d; color:#4ade80; }}
+  .status.bad {{ background:#5a1a1a; color:#f87171; }}
+  .empty {{ color:#5a5f66; font-style:italic; }}
+  .meta {{ color:#5a5f66; font-size:12px; }}
+</style>
+</head><body>
+<h1>P2P Live Dashboard</h1>
+<div class="meta">Auto-refreshes every 5s · {len(carts)} carts · {len(reqs)} reqs · {len(orders)} POs · {len(grs)} GRs · {len(invoices)} invoices</div>
+<h2>Carts</h2>
+<table><tr><th>Cart ID</th><th>Status</th><th>Lines</th><th>Total</th><th>Created</th></tr>{cart_rows}</table>
+<h2>Requisitions</h2>
+<table><tr><th>Req ID</th><th>Cart</th><th>Status</th><th>Tier</th><th>Total</th></tr>{req_rows}</table>
+<h2>Purchase Orders</h2>
+<table><tr><th>PO ID</th><th>Req</th><th>Supplier</th><th>Status</th><th>Total</th></tr>{order_rows}</table>
+<h2>Goods Receipts</h2>
+<table><tr><th>GR ID</th><th>PO</th><th>Status</th><th>Received Value</th></tr>{gr_rows}</table>
+<h2>Invoices</h2>
+<table><tr><th>Inv #</th><th>PO</th><th>GR</th><th>Status</th><th>Match</th><th>Total</th></tr>{invoice_rows}</table>
+</body></html>"""
+
 
 # ── CATALOG TOOLS ─────────────────────────────────────────────────────────────
 
@@ -627,12 +745,174 @@ def demo_reset() -> dict:
     return {"status": "reset", "message": "All P2P demo state cleared. Catalog is unaffected."}
 
 
-# ── Health check (for Render / load balancers) ────────────────────────────────
+# ── OBSERVABILITY / LIST TOOLS ─────────────────────────────────────────────────
+
+@mcp.tool()
+def cart_list() -> dict:
+    """List all carts with id, status, and a short summary. No arguments."""
+    items = [
+        {
+            "cart_id": c["cart_id"],
+            "status": c["status"],
+            "lines_count": len(c["lines"]),
+            "grand_total": sum(l["line_total"] for l in c["lines"]),
+            "created_at": c.get("created_at"),
+        }
+        for c in CARTS.values()
+    ]
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"carts": items, "count": len(items)}
+
+
+@mcp.tool()
+def req_list() -> dict:
+    """List all requisitions with id, status, tier, and total. No arguments."""
+    items = [
+        {
+            "req_id": r["req_id"],
+            "cart_id": r.get("cart_id"),
+            "status": r["status"],
+            "approval_tier": r.get("approval_tier"),
+            "grand_total": r.get("grand_total", 0),
+            "created_at": r.get("created_at"),
+        }
+        for r in REQS.values()
+    ]
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"reqs": items, "count": len(items)}
+
+
+@mcp.tool()
+def order_list() -> dict:
+    """List all purchase orders with id, status, supplier, and total. No arguments."""
+    items = [
+        {
+            "po_id": o["po_id"],
+            "req_id": o.get("req_id"),
+            "supplier_id": o.get("supplier_id"),
+            "status": o["status"],
+            "grand_total": o.get("grand_total", 0),
+            "created_at": o.get("created_at"),
+        }
+        for o in ORDERS.values()
+    ]
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"orders": items, "count": len(items)}
+
+
+@mcp.tool()
+def gr_list() -> dict:
+    """List all goods receipts with id, status, and lines count. No arguments."""
+    items = [
+        {
+            "gr_id": g["gr_id"],
+            "po_id": g.get("po_id"),
+            "status": g["status"],
+            "lines_count": len(g.get("lines", [])),
+            "total_received_value": g.get("total_received_value"),
+            "created_at": g.get("created_at"),
+        }
+        for g in GRS.values()
+    ]
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"grs": items, "count": len(items)}
+
+
+@mcp.tool()
+def invoice_list() -> dict:
+    """List all invoices with id, status, match status, and total. No arguments."""
+    items = [
+        {
+            "inv_id": i["inv_id"],
+            "inv_number": i.get("inv_number"),
+            "po_id": i.get("po_id"),
+            "gr_id": i.get("gr_id"),
+            "status": i["status"],
+            "match_status": i.get("match_status"),
+            "inv_total": i.get("inv_total", 0),
+            "created_at": i.get("created_at"),
+        }
+        for i in INVOICES.values()
+    ]
+    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"invoices": items, "count": len(items)}
+
+
+@mcp.tool()
+def trace_chain(id: str) -> dict:
+    """
+    Given ANY one of cart_id, req_id, po_id, gr_id, or inv_id, return the full
+    linked P2P chain (cart -> req -> po -> gr -> invoice) for whichever of
+    those records exist and are connected. Use this to answer "show me the
+    audit trail for X".
+    """
+    etype = _detect_entity_type(id)
+    if etype is None:
+        return {"error": f"'{id}' does not match a known ID prefix (CART-/REQ-/PO-/GR-/INV-)"}
+
+    cart = req = order = gr = inv = None
+
+    if etype == "cart":
+        cart = CARTS.get(id)
+        if cart is None:
+            return {"error": f"Cart {id} not found"}
+    elif etype == "req":
+        req = REQS.get(id)
+        if req is None:
+            return {"error": f"Requisition {id} not found"}
+        cart = CARTS.get(req.get("cart_id"))
+    elif etype == "po":
+        order = ORDERS.get(id)
+        if order is None:
+            return {"error": f"PO {id} not found"}
+        req = REQS.get(order.get("req_id"))
+        cart = CARTS.get(req.get("cart_id")) if req else None
+    elif etype == "gr":
+        gr = GRS.get(id)
+        if gr is None:
+            return {"error": f"GR {id} not found"}
+        order = ORDERS.get(gr.get("po_id"))
+        req = REQS.get(order.get("req_id")) if order else None
+        cart = CARTS.get(req.get("cart_id")) if req else None
+    elif etype == "inv":
+        inv = INVOICES.get(id)
+        if inv is None:
+            return {"error": f"Invoice {id} not found"}
+        gr = GRS.get(inv.get("gr_id"))
+        order = ORDERS.get(inv.get("po_id"))
+        req = REQS.get(order.get("req_id")) if order else None
+        cart = CARTS.get(req.get("cart_id")) if req else None
+
+    if cart is not None and req is None:
+        req = next((r for r in REQS.values() if r.get("cart_id") == cart["cart_id"]), None)
+    if req is not None and order is None:
+        order = next((o for o in ORDERS.values() if o.get("req_id") == req["req_id"]), None)
+    if order is not None and gr is None:
+        gr = next((g for g in GRS.values() if g.get("po_id") == order["po_id"]), None)
+    if gr is not None and inv is None:
+        inv = next((i for i in INVOICES.values() if i.get("gr_id") == gr["gr_id"]), None)
+
+    chain = {"cart": cart, "req": req, "order": order, "gr": gr, "invoice": inv}
+    return {
+        "input_id": id,
+        "detected_type": etype,
+        "chain": chain,
+        "present": [k for k, v in chain.items() if v is not None],
+    }
+
+
+# ── Health check & Dashboard (for Render / load balancers, and live demo view) ─
 
 @mcp.custom_route("/mcp-health", methods=["GET"])
 async def health(request):
     from starlette.responses import JSONResponse
-    return JSONResponse({"status": "ok", "tools": 26, "service": "p2p-hackathon-mcp"})
+    return JSONResponse({"status": "ok", "tools": 32, "service": "p2p-hackathon-mcp"})
+
+
+@mcp.custom_route("/dashboard", methods=["GET"])
+async def dashboard(request):
+    from starlette.responses import HTMLResponse
+    return HTMLResponse(_render_dashboard_html())
 
 
 # ── Run ───────────────────────────────────────────────────────────────────────

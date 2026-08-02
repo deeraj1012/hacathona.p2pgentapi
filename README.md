@@ -20,7 +20,7 @@ live demo from Render's free-tier ~15 min idle spin-down wiping in-memory state
 between the pitch and the walkthrough. Call `demo_reset` to clear it for a clean
 re-run.
 
-## Tools (26 total)
+## Tools (32 total)
 
 ### Catalog Agent
 | Tool | Description |
@@ -71,6 +71,21 @@ re-run.
 | Tool | Description |
 |---|---|
 | `demo_reset` | Clear all carts/reqs/POs/GRs/invoices for a clean re-run. Catalog is unaffected |
+
+### Observability
+| Tool | Description |
+|---|---|
+| `cart_list` / `req_list` / `order_list` / `gr_list` / `invoice_list` | List all records of that type (id, status, key totals), most-recent-first |
+| `trace_chain` | Given ANY one of cart_id/req_id/po_id/gr_id/inv_id, walk the linked chain and return whichever of cart → req → PO → GR → invoice exist and are connected |
+
+## Live Dashboard
+
+`GET /dashboard` (same host/port as the MCP server, e.g.
+`https://p2p-hackathon-mcp.onrender.com/dashboard`) renders a live, auto-refreshing
+(every 5s) HTML view of every cart/requisition/PO/GR/invoice with status badges.
+Keep it open on a second screen during the demo — it's the visible proof that the
+agent is driving a real backend, not a scripted transcript. No new dependencies;
+reuses the same `@mcp.custom_route` pattern as `/mcp-health`.
 
 ## Pre-seeded Catalog Items
 
@@ -129,5 +144,39 @@ primary mechanism.
 Also fixed `gr_confirm` dropping `unit_price` from its output, which silently
 priced every invoice line at 0 and made `invoice_match` always report MISMATCH.
 
+**Second bug in the same area**: even after the above, RequisitionAgent,
+OrderAgent, and InvoiceAgent's Intent Analyzer *user*-turn prompt only ever
+referenced the (empty) upstream event object — `{{system.cartFlipEvent}}`,
+`{{system.reqApprovedEvent}}`, `{{system.grConfirmedEvent}}` — and never
+included `{{system.userQuery}}`. The fallback instructions added to the
+*system* prompt told the model to look for an ID in the buyer's message, but
+the user turn never actually contained that message, so there was nothing to
+find no matter what the buyer typed. Fixed by adding `{{system.userQuery}}` to
+all three user prompts, matching what GoodsReceiptAgent's template already did
+correctly. Confirmed working end-to-end live (cart → CartFlipped → requisition
+created and approved).
+
 All six workflows are enabled (`isDisabled: false`). Re-import these JSONs into
 QiStudio to pick up the fixes.
+
+## Approval Architecture (current state)
+
+Verified by code audit — worth knowing precisely before presenting this as a
+feature to judges:
+
+- `req_submit` computes an `approval_tier` (AUTO/MANAGER/DIRECTOR by spend) —
+  **informational only**. `req_approve` always sets `APPROVED` unconditionally
+  regardless of tier; the `audit_flag` it returns is never enforced anywhere.
+- `order_finalize` and `invoice_approve` likewise always succeed —
+  `invoice_approve` approves a MISMATCH invoice exactly like a MATCHED one.
+- The only *real* gates are ordering preconditions, not human judgment:
+  `order_create` requires the req be `APPROVED`, `gr_create` requires the PO be
+  `ISSUED`, `invoice_finalize` requires the invoice be `APPROVED`.
+- The **only** genuine human-in-the-loop pause in the system is the GR
+  short-shipment path: `gr_validator` sets `recommendation: NEEDS_CLARIFICATION`
+  on a quantity mismatch, which halts the chain (`routing.next_node: null`,
+  `requires_approval: true`) and the response builder explicitly waits for the
+  buyer's decision. This is real and demo-able today.
+- `req_agent.json` has a parallel `ReqPendingApproval` event shape scaffolded,
+  but nothing in `server.py` can currently trigger it (`req_approve` never
+  fails) — it's unreachable dead code unless real gating is added later.
